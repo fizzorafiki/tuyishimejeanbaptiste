@@ -15,6 +15,8 @@ import {
   ExternalLink,
   Github,
   Linkedin,
+  Instagram,
+  Twitter,
   ChevronUp,
   Menu,
   X,
@@ -40,7 +42,13 @@ import {
   Cpu,
   Shield,
   Camera,
-  Eye
+  Eye,
+  Lock,
+  Unlock,
+  Settings,
+  Plus,
+  Trash2,
+  Upload
 } from "lucide-react";
 import { PROJECTS, SKILL_CATEGORIES, SERVICES, TESTIMONIALS } from "./data";
 import { Project, ChatMessage, VisitorMessage, SkillCategory } from "./types";
@@ -74,6 +82,117 @@ export default function App() {
   // Localized state with English and Kinyarwanda
   const [language, setLanguage] = useState<"en" | "rw">("en");
   const t = TRANSLATIONS[language];
+
+  // Dynamic customized data states (persisted in localStorage)
+  const [projects, setProjects] = useState<Project[]>(() => {
+    const saved = localStorage.getItem("tjb_portfolio_projects");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error("Error loading portfolio projects:", e);
+      }
+    }
+    return PROJECTS;
+  });
+
+  const [skillCategories, setSkillCategories] = useState<SkillCategory[]>(() => {
+    const saved = localStorage.getItem("tjb_portfolio_skill_categories");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error("Error loading skill categories:", e);
+      }
+    }
+    return SKILL_CATEGORIES;
+  });
+
+  const [galleryImages, setGalleryImages] = useState<{ id: string; url: string; title: string; desc: string }[]>(() => {
+    const saved = localStorage.getItem("tjb_portfolio_gallery");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error("Error loading gallery images:", e);
+      }
+    }
+    return BAPTISTE_GALLERY;
+  });
+
+  const [newGalleryTitle, setNewGalleryTitle] = useState("");
+  const [newGalleryDesc, setNewGalleryDesc] = useState("");
+  const [newGalleryImage, setNewGalleryImage] = useState("");
+
+  const getProjectImage = (project: Project) => {
+    if (project.image) return project.image;
+    
+    // Provide gorgeous Unsplash falls backs based on ID or category or image seed
+    const seed = project.imgSeed || project.id || "";
+    if (seed.includes("inventory")) {
+      return "https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?q=80&w=600";
+    }
+    if (seed.includes("bakery")) {
+      return "https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=600";
+    }
+    if (seed.includes("monitoring") || seed.includes("monitor") || seed.includes("latency")) {
+      return "https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=600";
+    }
+    if (seed.includes("gateway") || seed.includes("api")) {
+      return "https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=600";
+    }
+    
+    // Default gorgeous dark tech setup
+    return "https://images.unsplash.com/photo-1542831371-29b0f74f9713?q=80&w=600";
+  };
+
+  // Admin authentication and modal portal states
+  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(() => {
+    return localStorage.getItem("tjb_admin_session") === "active";
+  });
+  const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
+  const [adminUsername, setAdminUsername] = useState("");
+  const [adminPassword, setAdminPassword] = useState("");
+  const [adminError, setAdminError] = useState("");
+  const [adminSuccessMsg, setAdminSuccessMsg] = useState("");
+  const [adminActiveTab, setAdminActiveTab] = useState<"project" | "skill" | "gallery" | "records">("project");
+
+  // Custom router state tracking paths
+  const [currentPath, setCurrentPath] = useState<string>(() => window.location.pathname);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      setCurrentPath(window.location.pathname);
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, []);
+
+  const navigateTo = (path: string) => {
+    window.history.pushState(null, "", path);
+    setCurrentPath(path);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  // States for adding a project
+  const [newProjectTitle, setNewProjectTitle] = useState("");
+  const [newProjectDesc, setNewProjectDesc] = useState("");
+  const [newProjectCategory, setNewProjectCategory] = useState("");
+  const [newProjectMetrics, setNewProjectMetrics] = useState("");
+  const [newProjectTags, setNewProjectTags] = useState("");
+  const [newProjectDetails, setNewProjectDetails] = useState(""); // Comma or newline separated
+  const [newProjectDemoUrl, setNewProjectDemoUrl] = useState("");
+  const [newProjectGithubUrl, setNewProjectGithubUrl] = useState("");
+  const [newProjectImage, setNewProjectImage] = useState("");
+
+  // States for adding a skill
+  const [selectedOrNewSkillCatId, setSelectedOrNewSkillCatId] = useState("frontend");
+  const [newSkillCatName, setNewSkillCatName] = useState("");
+  const [newSkillCatIcon, setNewSkillCatIcon] = useState("server");
+  const [newSkillName, setNewSkillName] = useState("");
+  const [newSkillProficiency, setNewSkillProficiency] = useState(90);
 
   // Local clock state
   const [currentTimeUTC, setCurrentTimeUTC] = useState("");
@@ -134,6 +253,239 @@ export default function App() {
   const [roleIndex, setRoleIndex] = useState(0);
   const [typedText, setTypedText] = useState("");
   const [isDeletingRole, setIsDeletingRole] = useState(false);
+
+  // Admin Login Handle function
+  const handleAdminLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    setAdminError("");
+    setAdminSuccessMsg("");
+    const usernameInput = adminUsername.trim().toLowerCase();
+    const isAcceptedUsername = usernameInput === "admin" || usernameInput === "fizzorafiki" || usernameInput === "fizzorafiki@gmail.com";
+    if (isAcceptedUsername && adminPassword === "admin123") {
+      setIsAdminLoggedIn(true);
+      localStorage.setItem("tjb_admin_session", "active");
+      setAdminSuccessMsg("Authorization granted. Accessing admin dashboard...");
+      // clear inputs
+      setAdminUsername("");
+      setAdminPassword("");
+    } else {
+      setAdminError("Invalid credential signatures.");
+    }
+  };
+
+  const handleAdminLogout = () => {
+    setIsAdminLoggedIn(false);
+    localStorage.removeItem("tjb_admin_session");
+    setAdminSuccessMsg("");
+    setAdminError("");
+  };
+
+  const handleAddProject = (e: React.FormEvent) => {
+    e.preventDefault();
+    setAdminError("");
+    setAdminSuccessMsg("");
+
+    if (!newProjectTitle.trim() || !newProjectDesc.trim() || !newProjectCategory.trim()) {
+      setAdminError("Please populate Title, Description, and Category labels.");
+      return;
+    }
+
+    const tagsArr = newProjectTags
+      ? newProjectTags.split(",").map(t => t.trim()).filter(Boolean)
+      : ["Custom Node"];
+
+    const detailsArr = newProjectDetails
+      ? newProjectDetails.split("\n").map(d => d.trim()).filter(Boolean)
+      : [
+          "Published and monitored via the administrative settings gateway.",
+          "Custom telemetry performance measurements enabled on system entry."
+        ];
+
+    const newProj: Project = {
+      id: `custom-proj-${Date.now()}`,
+      title: newProjectTitle.trim(),
+      description: newProjectDesc.trim(),
+      category: newProjectCategory.trim(),
+      imgSeed: "custom-node",
+      tags: tagsArr,
+      metrics: newProjectMetrics.trim() || undefined,
+      details: detailsArr,
+      demoUrl: newProjectDemoUrl.trim() || "#projects",
+      githubUrl: newProjectGithubUrl.trim() || "https://github.com",
+      image: newProjectImage || undefined
+    };
+
+    const updated = [newProj, ...projects];
+    setProjects(updated);
+    localStorage.setItem("tjb_portfolio_projects", JSON.stringify(updated));
+
+    // Reset standard state hooks
+    setNewProjectTitle("");
+    setNewProjectDesc("");
+    setNewProjectCategory("");
+    setNewProjectMetrics("");
+    setNewProjectTags("");
+    setNewProjectDetails("");
+    setNewProjectDemoUrl("");
+    setNewProjectGithubUrl("");
+    setNewProjectImage("");
+
+    setAdminSuccessMsg("Dynamic Project compiled and published successfully.");
+  };
+
+  const handleDeleteProject = (projId: string) => {
+    const updated = projects.filter(p => p.id !== projId);
+    setProjects(updated);
+    localStorage.setItem("tjb_portfolio_projects", JSON.stringify(updated));
+    setAdminSuccessMsg("Project deleted from environment.");
+  };
+
+  const handleAddSkill = (e: React.FormEvent) => {
+    e.preventDefault();
+    setAdminError("");
+    setAdminSuccessMsg("");
+
+    if (!newSkillName.trim()) {
+      setAdminError("Please provide a Skill name.");
+      return;
+    }
+
+    let updatedCats = [...skillCategories];
+
+    if (selectedOrNewSkillCatId === "new") {
+      if (!newSkillCatName.trim()) {
+        setAdminError("Category catalog name is empty.");
+        return;
+      }
+      const newCatId = `custom-cat-${Date.now()}`;
+      const newCategory: SkillCategory = {
+        id: newCatId,
+        name: newSkillCatName.trim(),
+        icon: newSkillCatIcon || "server",
+        skills: [{ name: newSkillName.trim(), proficiency: Number(newSkillProficiency) }]
+      };
+      updatedCats.push(newCategory);
+      // set updates in selectors
+      setSelectedOrNewSkillCatId(newCatId);
+      setNewSkillCatName("");
+    } else {
+      const idx = updatedCats.findIndex(c => c.id === selectedOrNewSkillCatId);
+      if (idx !== -1) {
+        const skillKey = newSkillName.trim();
+        const existingSkillIdx = updatedCats[idx].skills.findIndex(s => s.name.toLowerCase() === skillKey.toLowerCase());
+        
+        if (existingSkillIdx !== -1) {
+          updatedCats[idx].skills[existingSkillIdx].proficiency = Number(newSkillProficiency);
+        } else {
+          updatedCats[idx].skills.push({ name: skillKey, proficiency: Number(newSkillProficiency) });
+        }
+      }
+    }
+
+    setSkillCategories(updatedCats);
+    localStorage.setItem("tjb_portfolio_skill_categories", JSON.stringify(updatedCats));
+
+    setNewSkillName("");
+    setNewSkillProficiency(90);
+    setAdminSuccessMsg("Technical skill synced with the active catalog.");
+  };
+
+  const handleDeleteSkill = (catId: string, skillName: string) => {
+    const updatedCats = skillCategories.map(c => {
+      if (c.id === catId) {
+        return {
+          ...c,
+          skills: c.skills.filter(s => s.name !== skillName)
+        };
+      }
+      return c;
+    }).filter(c => c.skills.length > 0);
+
+    setSkillCategories(updatedCats);
+    localStorage.setItem("tjb_portfolio_skill_categories", JSON.stringify(updatedCats));
+    setAdminSuccessMsg("Skill point dropped.");
+  };
+
+  const handleResetData = () => {
+    if (window.confirm("Synchronize database registers to default state? Custom projects and catalog entries will be cleaned.")) {
+      setProjects(PROJECTS);
+      setSkillCategories(SKILL_CATEGORIES);
+      setGalleryImages(BAPTISTE_GALLERY);
+      localStorage.removeItem("tjb_portfolio_projects");
+      localStorage.removeItem("tjb_portfolio_skill_categories");
+      localStorage.removeItem("tjb_portfolio_gallery");
+      setAdminSuccessMsg("Registers flushed. Initial state restored.");
+    }
+  };
+
+  // Convert uploaded files safely to inline base64
+  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) {
+        setAdminError("File is too large. Limit is 2MB for storage consistency.");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setNewProjectImage(reader.result as string);
+        setAdminSuccessMsg("Asset uploaded and processed successfully.");
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleGalleryImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) {
+        setAdminError("File is too large. Limit is 2MB for storage consistency.");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setNewGalleryImage(reader.result as string);
+        setAdminSuccessMsg("Gallery image asset uploaded and parsed.");
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleAddGalleryImage = (e: React.FormEvent) => {
+    e.preventDefault();
+    setAdminError("");
+    setAdminSuccessMsg("");
+
+    if (!newGalleryTitle.trim() || !newGalleryDesc.trim() || !newGalleryImage) {
+      setAdminError("Please populate Title, Description, and select an image file from your desktop.");
+      return;
+    }
+
+    const newPhoto = {
+      id: `g-custom-${Date.now()}`,
+      url: newGalleryImage,
+      title: newGalleryTitle.trim(),
+      desc: newGalleryDesc.trim()
+    };
+
+    const updated = [...galleryImages, newPhoto];
+    setGalleryImages(updated);
+    localStorage.setItem("tjb_portfolio_gallery", JSON.stringify(updated));
+
+    // Clear form
+    setNewGalleryTitle("");
+    setNewGalleryDesc("");
+    setNewGalleryImage("");
+    
+    setAdminSuccessMsg("Gallery image published to the photostream successfully!");
+  };
+
+  const handleDeleteGalleryImage = (id: string) => {
+    const updated = galleryImages.filter(item => item.id !== id);
+    setGalleryImages(updated);
+    localStorage.setItem("tjb_portfolio_gallery", JSON.stringify(updated));
+    setAdminSuccessMsg("Gallery image trace purged from local registry.");
+  };
 
   // Setup local clock tick
   useEffect(() => {
@@ -425,6 +777,10 @@ export default function App() {
         return <Database className="w-5 h-5 text-orange-500" />;
       case "layers":
         return <Layers className="w-5 h-5 text-orange-500" />;
+      case "cpu":
+        return <Cpu className="w-5 h-5 text-orange-500" />;
+      case "palette":
+        return <Palette className="w-5 h-5 text-orange-500" />;
       default:
         return <Terminal className="w-5 h-5 text-orange-500" />;
     }
@@ -441,6 +797,740 @@ export default function App() {
       default: return sec;
     }
   };
+
+  if (currentPath === "/admin") {
+    return (
+      <div className="min-h-screen bg-neutral-950 text-neutral-100 font-sans selection:bg-orange-500 selection:text-neutral-950 overflow-x-hidden relative flex flex-col">
+        {/* GL Shader Interactive Background */}
+        <WebGLShader />
+
+        {/* Dynamic Background Gradients */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(249,115,22,0.12),rgba(255,255,255,0))] pointer-events-none" />
+        <div className="absolute top-[10%] left-1/2 -translate-x-1/2 w-[600px] h-[600px] rounded-full bg-orange-500/3 blur-[140px] pointer-events-none" />
+
+        {/* Persistent Navigation Header */}
+        <nav className="fixed top-0 left-0 right-0 z-40 transition-all duration-300 bg-neutral-950/80 backdrop-blur-xl border-b border-neutral-900/60 py-4 shadow-lg shadow-neutral-950/20">
+          <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
+            <a
+              href="/"
+              onClick={(e) => {
+                e.preventDefault();
+                navigateTo("/");
+              }}
+              className="text-neutral-100 font-mono text-sm tracking-widest font-semibold flex items-center gap-1.5 focus:outline-none focus:ring-1 focus:ring-orange-500"
+            >
+              TJB<span className="text-orange-500">&lt;/&gt;</span>
+              <span className="text-[10px] text-neutral-500 font-normal uppercase tracking-wider bg-neutral-900 border border-neutral-800 px-2 py-0.5 rounded-full ml-1.5">
+                Admin Center
+              </span>
+            </a>
+
+            <div className="flex items-center gap-4 text-neutral-500 text-[11px] font-mono">
+              <div className="hidden sm:flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-neutral-600 animate-spin" style={{ animationDuration: "12s" }} />
+                <span>GMT:</span>
+                <span className="text-neutral-300 bg-neutral-900 border border-neutral-900 px-1.5 py-0.5 rounded">
+                  {currentTimeUTC ? currentTimeUTC.substring(17, 25) : "Ticks..."} UTC
+                </span>
+              </div>
+
+              <span className="hidden sm:inline text-neutral-850">|</span>
+
+              <button
+                onClick={() => navigateTo("/")}
+                className="px-3 py-1.5 rounded-full bg-neutral-900 hover:bg-neutral-850 border border-neutral-800 text-neutral-200 hover:text-white transition-colors cursor-pointer flex items-center gap-1.5 font-sans font-medium"
+              >
+                <span>Back to App</span>
+                <ArrowRight className="w-3.5 h-3.5 text-neutral-400" />
+              </button>
+            </div>
+          </div>
+        </nav>
+
+        {/* Space spacing fill */}
+        <div className="h-20" />
+
+        {/* Main Content Workspace viewport */}
+        <div className="flex-1 max-w-7xl w-full mx-auto px-6 py-12 relative z-10 flex flex-col">
+          
+          {/* Status logs */}
+          <div className="space-y-4 mb-8">
+            {adminError && (
+              <div className="p-4 bg-red-500/5 border border-red-500/15 text-red-400 text-xs rounded-xl flex items-center gap-2.5 font-mono animate-[shake_0.5s_ease-in-out] max-w-xl mx-auto w-full">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{adminError}</span>
+              </div>
+            )}
+            {adminSuccessMsg && (
+              <div className="p-4 bg-green-500/5 border border-green-500/15 text-green-400 text-xs rounded-xl flex items-center gap-2.5 font-mono max-w-xl mx-auto w-full">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>{adminSuccessMsg}</span>
+              </div>
+            )}
+          </div>
+
+          {!isAdminLoggedIn ? (
+            <div className="max-w-md mx-auto py-12 w-full">
+              <motion.div
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-neutral-900/15 border border-neutral-900/70 p-8 rounded-3xl backdrop-blur-md shadow-2xl relative"
+              >
+                <div className="absolute top-0 right-0 w-[120px] h-[120px] rounded-full bg-orange-500/[0.015] blur-[30px] pointer-events-none" />
+                <form onSubmit={handleAdminLogin} className="space-y-6">
+                  <div className="space-y-2 text-center">
+                    <span className="p-3 bg-orange-500/5 border border-orange-500/15 text-orange-500 rounded-2xl inline-block mb-3">
+                      <Lock className="w-5 h-5 animate-pulse" />
+                    </span>
+                    <h2 className="text-lg font-bold text-neutral-105">Access Key Challenge</h2>
+                    <p className="text-[11px] font-mono text-neutral-500 max-w-xs mx-auto uppercase tracking-wider">Provide secure administrative credentials for portal gate permission</p>
+                  </div>
+
+                  <div className="space-y-4 font-mono">
+                    <div className="space-y-1.5">
+                      <label className="text-[9px] font-semibold text-neutral-450 uppercase tracking-wider block">Developer ID</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="E.g., admin"
+                        value={adminUsername}
+                        onChange={(e) => setAdminUsername(e.target.value)}
+                        className="w-full bg-neutral-950 border border-neutral-850 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-700 focus:outline-none focus:ring-1 focus:ring-orange-500 focus:border-orange-500 transition-all font-mono"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[9px] font-semibold text-neutral-455 uppercase tracking-wider block">Security Token Key</label>
+                      <input
+                        type="password"
+                        required
+                        placeholder="••••••••••••"
+                        value={adminPassword}
+                        onChange={(e) => setAdminPassword(e.target.value)}
+                        className="w-full bg-neutral-950 border border-neutral-850 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-700 focus:outline-none focus:ring-1 focus:ring-orange-500 focus:border-orange-500 transition-all font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 bg-neutral-950/80 border border-neutral-900 rounded-xl font-mono text-[9.5px] text-neutral-500 text-center uppercase tracking-wider leading-relaxed">
+                    Authentication Tip: Login with Username <span className="text-orange-500 font-bold">fizzorafiki</span> or <span className="text-orange-500 font-bold">admin</span> & Password <span className="text-orange-500 font-bold">admin123</span>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-3.5 px-4 bg-orange-500 cursor-pointer text-white font-mono text-xs uppercase tracking-widest hover:bg-orange-600 rounded-xl transition-all shadow-[0_0_20px_rgba(249,115,22,0.12)] flex items-center justify-center gap-2 font-bold hover:scale-[1.01]"
+                  >
+                    <Unlock className="w-4 h-4" />
+                    <span>Inbound Authenticate Gate</span>
+                  </button>
+                </form>
+              </motion.div>
+            </div>
+          ) : (
+            <div className="space-y-10 animate-fade-in flex-1">
+              {/* Authorized Dashboard Header control row */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 p-6 md:p-8 bg-neutral-900/10 border border-neutral-900 rounded-3xl backdrop-blur-md relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-[200px] h-[200px] bg-green-500/[0.01] blur-[60px] pointer-events-none" />
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-[0_0_6px_#22c55e]" />
+                    <span className="text-[10px] font-mono uppercase tracking-[0.2em] font-semibold text-green-400">Gateway Pipeline Status Active</span>
+                  </div>
+                  <h2 className="text-xl md:text-2xl font-bold tracking-tight text-neutral-100">Welcome back, Tuyishime Jean Baptiste</h2>
+                  <p className="text-[11px] font-mono text-neutral-500">Authorized telemetry system console. Update custom specializations, system designs, and projects index logs dynamically.</p>
+                </div>
+                <button
+                  onClick={handleAdminLogout}
+                  className="px-4 py-2 border border-red-500/15 text-red-500 bg-red-500/5 hover:bg-red-500/10 hover:text-red-400 rounded-xl transition-all font-mono text-xs uppercase font-bold tracking-wider cursor-pointer"
+                >
+                  Terminate Session
+                </button>
+              </div>
+
+              {/* Dynamic split space with Tab system */}
+              <div className="grid lg:grid-cols-12 gap-8 items-start">
+                
+                {/* Left Switchboard Column */}
+                <div className="lg:col-span-4 space-y-4">
+                  <div className="bg-neutral-950 border border-neutral-900 rounded-2xl p-4 space-y-2">
+                    <span className="text-[9px] font-mono text-neutral-500 uppercase tracking-widest font-bold mb-2 block border-b border-neutral-900 pb-1.5">Active Nodes Panel Switchboard</span>
+                    {[
+                      { id: "project", label: "Add Project Integration", desc: "Introduce a system blueprint logs node", icon: <LayoutGrid className="w-4 h-4" /> },
+                      { id: "skill", label: "Add Skill Specialty", desc: "Update expertise proficiency registers", icon: <Cpu className="w-4 h-4" /> },
+                      { id: "gallery", label: "Manage Photo Gallery", desc: "Upload custom photos from your desktop", icon: <Camera className="w-4 h-4" /> },
+                      { id: "records", label: "Manage Active Clusters", desc: "View core matrix listings & drop node records", icon: <Activity className="w-4 h-4" /> }
+                    ].map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => {
+                          setAdminActiveTab(item.id as any);
+                          setAdminError("");
+                          setAdminSuccessMsg("");
+                        }}
+                        className={`w-full p-4 rounded-xl text-left border flex items-center gap-4 transition-all duration-300 cursor-pointer ${
+                          adminActiveTab === item.id
+                            ? "border-orange-500/40 bg-orange-500/[0.03] text-orange-400 font-semibold"
+                            : "border-transparent text-neutral-450 hover:bg-neutral-900/50 hover:text-neutral-200"
+                        }`}
+                      >
+                        <span className={`p-2.5 rounded-lg border transition-all ${
+                          adminActiveTab === item.id ? "bg-orange-500/10 border-orange-500/20 text-orange-500" : "bg-neutral-900 border-neutral-850 text-neutral-500"
+                        }`}>
+                          {item.icon}
+                        </span>
+                        <div className="min-w-0">
+                          <span className="text-[11px] uppercase tracking-wider font-mono block leading-none font-bold">{item.label}</span>
+                          <span className="text-[10px] font-mono text-neutral-500 block mt-1 leading-snug">{item.desc}</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Production Standards and Statistics Cards */}
+                  <div className="p-5 rounded-2xl border border-neutral-900/60 bg-neutral-900/10 backdrop-blur-md font-mono text-[11px] text-neutral-555 space-y-3.5">
+                    <p className="text-neutral-400 uppercase tracking-widest font-bold text-[9px] border-b border-neutral-900 pb-2">Console Operations Check List</p>
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_6px_#22c55e]" />
+                      <span>Production records persistent on browser node storage</span>
+                    </div>
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_6px_#22c55e]" />
+                      <span>Local and remote files validated with typesafety limits</span>
+                    </div>
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_6px_#22c55e]" />
+                      <span>Secure content forms and escape protocols enabled</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Workspace Form Module */}
+                <div className="lg:col-span-8 bg-neutral-900/15 border border-neutral-900 rounded-3xl p-6 md:p-8 relative min-h-[460px] backdrop-blur-md">
+                  <div className="absolute inset-x-0 top-0 h-[100px] rounded-full bg-orange-500/2 blur-[40px] pointer-events-none" />
+                  
+                  {/* TAB CONTENT: ADD PROJECT */}
+                  {adminActiveTab === "project" && (
+                    <div className="space-y-6">
+                      <div className="border-b border-neutral-900/50 pb-4">
+                        <h3 className="text-neutral-100 font-mono text-xs uppercase tracking-widest font-bold">Declare New System Design Node</h3>
+                        <p className="text-[11px] font-mono text-neutral-555 mt-1">Publish an original creation to the Featured Projects grid index.</p>
+                      </div>
+
+                      <form onSubmit={handleAddProject} className="space-y-6">
+                        <div className="grid md:grid-cols-2 gap-6">
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-mono text-neutral-400 uppercase block font-semibold">Project Title *</label>
+                            <input
+                              type="text"
+                              required
+                              placeholder="E.g., Automated Crypto Ledger"
+                              value={newProjectTitle}
+                              onChange={(e) => setNewProjectTitle(e.target.value)}
+                              className="w-full bg-neutral-950 border border-neutral-850 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-700 focus:outline-none focus:ring-1 focus:ring-orange-500 transition-all font-mono"
+                            />
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-mono text-neutral-400 uppercase block font-semibold">Category Segment *</label>
+                            <input
+                              type="text"
+                              required
+                              placeholder="E.g., Full-Stack System, Enterprise Gateway"
+                              value={newProjectCategory}
+                              onChange={(e) => setNewProjectCategory(e.target.value)}
+                              className="w-full bg-neutral-950 border border-neutral-850 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-700 focus:outline-none focus:ring-1 focus:ring-orange-500 transition-all font-mono"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-mono text-neutral-400 uppercase block font-semibold">System Description *</label>
+                          <textarea
+                            rows={3}
+                            required
+                            placeholder="Summarize key scope, infrastructure parameters, and systems goals..."
+                            value={newProjectDesc}
+                            onChange={(e) => setNewProjectDesc(e.target.value)}
+                            className="w-full bg-neutral-950 border border-neutral-850 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-700 focus:outline-none focus:ring-1 focus:ring-orange-500 transition-all font-mono"
+                          />
+                        </div>
+
+                        <div className="grid md:grid-cols-2 gap-6">
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-mono text-neutral-400 uppercase block font-semibold">Key Metric (Optional)</label>
+                            <input
+                              type="text"
+                              placeholder="E.g., Audit latency dropped by 45%"
+                              value={newProjectMetrics}
+                              onChange={(e) => setNewProjectMetrics(e.target.value)}
+                              className="w-full bg-neutral-950 border border-neutral-850 rounded-xl px-4 py-3 text-xs text-neutral-205 placeholder-neutral-700 focus:outline-none focus:ring-1 focus:ring-orange-500 transition-all font-mono"
+                            />
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-mono text-neutral-400 uppercase block font-semibold">Stack Tags (Comma separated)</label>
+                            <input
+                              type="text"
+                              placeholder="React, TypeScript, SQLite, Express"
+                              value={newProjectTags}
+                              onChange={(e) => setNewProjectTags(e.target.value)}
+                              className="w-full bg-neutral-950 border border-neutral-850 rounded-xl px-4 py-3 text-xs text-neutral-205 placeholder-neutral-700 focus:outline-none focus:ring-1 focus:ring-orange-500 transition-all font-mono"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Image Inputs Section */}
+                        <div className="p-5 bg-neutral-950/40 border border-neutral-900 rounded-2xl space-y-4">
+                          <h4 className="text-xs uppercase font-mono tracking-wider text-neutral-300 font-semibold flex items-center gap-1.5">
+                            <Camera className="w-4 h-4 text-orange-500" />
+                            <span>Project Asset Mockup Image</span>
+                          </h4>
+                          <p className="text-[11px] text-neutral-505 font-mono">Provide an exquisite illustration. You can upload an image file or paste a custom photo URL.</p>
+
+                          <div className="grid md:grid-cols-2 gap-5 items-start">
+                            {/* File upload */}
+                            <div className="space-y-2">
+                              <span className="text-[9px] font-mono text-neutral-450 uppercase tracking-widest block font-bold">Select Local Image File</span>
+                              <div className="relative border border-dashed border-neutral-800 hover:border-orange-500/40 rounded-xl p-4 bg-neutral-950/60 transition-colors flex flex-col items-center justify-center text-center">
+                                <Upload className="w-5 h-5 text-neutral-600 mb-2" />
+                                <span className="text-[10px] text-neutral-450 font-mono block font-medium">JPEG or PNG file</span>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={handleImageFileChange}
+                                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Direct Web URL */}
+                            <div className="space-y-2">
+                              <span className="text-[9px] font-mono text-neutral-450 uppercase tracking-widest block font-bold">Or Enter Photo Web URL</span>
+                              <input
+                                type="url"
+                                placeholder="https://images.unsplash.com/...q=80&w=600"
+                                value={newProjectImage}
+                                onChange={(e) => setNewProjectImage(e.target.value)}
+                                className="w-full bg-neutral-950 border border-neutral-850 rounded-xl px-4 py-3.5 text-xs text-neutral-205 placeholder-neutral-700 focus:outline-none focus:ring-1 focus:ring-orange-500 transition-all font-mono"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Preview container */}
+                          {newProjectImage && (
+                            <div className="pt-2 border-t border-neutral-900 flex items-center gap-4">
+                              <div className="w-20 h-11 rounded border border-neutral-850 bg-neutral-950 overflow-hidden shrink-0">
+                                <img src={newProjectImage} alt="Thumbnail preview" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                              </div>
+                              <div>
+                                <span className="text-[10px] font-mono text-green-400 block font-semibold uppercase">Register Asset Loaded</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setNewProjectImage("")}
+                                  className="text-[10px] font-mono text-red-500 hover:text-red-400 underline mt-0.5"
+                                >
+                                  Purge image link
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Detailed Specs list */}
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-mono text-neutral-400 uppercase block font-semibold">Architectural Specifications (One detail statement per line)</label>
+                          <textarea
+                            rows={3}
+                            placeholder="Implemented typesafe, compiled database routes minimizing memory overhead.&#10;Integrated TLS-enabled endpoints keeping core systems isolated."
+                            value={newProjectDetails}
+                            onChange={(e) => setNewProjectDetails(e.target.value)}
+                            className="w-full bg-neutral-950 border border-neutral-850 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-700 focus:outline-none focus:ring-1 focus:ring-orange-500 transition-all font-mono"
+                          />
+                        </div>
+
+                        <div className="grid md:grid-cols-2 gap-6">
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-mono text-neutral-400 uppercase block font-semibold">Demo Sandbox Link (Optional)</label>
+                            <input
+                              type="text"
+                              placeholder="#projects"
+                              value={newProjectDemoUrl}
+                              onChange={(e) => setNewProjectDemoUrl(e.target.value)}
+                              className="w-full bg-neutral-950 border border-neutral-850 rounded-xl px-4 py-3 text-xs text-neutral-205 placeholder-neutral-700 focus:outline-none focus:ring-1 focus:ring-orange-500 transition-all font-mono"
+                            />
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-mono text-neutral-400 uppercase block font-semibold">GitHub Source Repository (Optional)</label>
+                            <input
+                              type="url"
+                              placeholder="https://github.com"
+                              value={newProjectGithubUrl}
+                              onChange={(e) => setNewProjectGithubUrl(e.target.value)}
+                              className="w-full bg-neutral-950 border border-neutral-850 rounded-xl px-4 py-3 text-xs text-neutral-205 placeholder-neutral-700 focus:outline-none focus:ring-1 focus:ring-orange-500 transition-all font-mono"
+                            />
+                          </div>
+                        </div>
+
+                        <button
+                          type="submit"
+                          className="py-3.5 px-6 bg-orange-500 cursor-pointer text-white font-mono text-xs uppercase tracking-widest hover:bg-orange-600 rounded-xl transition-all shadow-[0_0_15px_rgba(249,115,22,0.15)] flex items-center justify-center gap-1.5 font-bold"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>Publish Project Integration</span>
+                        </button>
+                      </form>
+                    </div>
+                  )}
+
+                  {/* TAB CONTENT: ADD SKILL */}
+                  {adminActiveTab === "skill" && (
+                    <div className="space-y-6">
+                      <div className="border-b border-neutral-900/50 pb-4">
+                        <h3 className="text-neutral-100 font-mono text-xs uppercase tracking-widest font-bold">Inject Technical Proficiency specialty</h3>
+                        <p className="text-[11px] font-mono text-neutral-555 mt-1">Append localized skill registers or construct dynamic custom groupings.</p>
+                      </div>
+
+                      <form onSubmit={handleAddSkill} className="space-y-6">
+                        <div className="grid md:grid-cols-2 gap-6">
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-mono text-neutral-400 uppercase block font-semibold">Skill Catalog Category</label>
+                            <select
+                              value={selectedOrNewSkillCatId}
+                              onChange={(e) => setSelectedOrNewSkillCatId(e.target.value)}
+                              className="w-full bg-neutral-950 border border-neutral-850 rounded-xl px-4 py-3.5 text-xs text-neutral-200 font-mono focus:outline-none focus:ring-1 focus:ring-orange-500"
+                            >
+                              {skillCategories.map((cat) => (
+                                <option key={cat.id} value={cat.id}>
+                                  {cat.name}
+                                </option>
+                              ))}
+                              <option value="new">+ Declare New Custom Category</option>
+                            </select>
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-mono text-neutral-400 uppercase block font-semibold">Skill Specialty Name *</label>
+                            <input
+                              type="text"
+                              required
+                              placeholder="E.g., Go / Gin API, WebSockets"
+                              value={newSkillName}
+                              onChange={(e) => setNewSkillName(e.target.value)}
+                              className="w-full bg-neutral-950 border border-neutral-850 rounded-xl px-4 py-3.5 text-xs text-neutral-200 placeholder-neutral-700 focus:outline-none focus:ring-1 focus:ring-orange-500 transition-all font-mono"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Conditional New Category setup */}
+                        {selectedOrNewSkillCatId === "new" && (
+                          <div className="p-5 bg-neutral-950/40 border border-neutral-850 rounded-2xl grid md:grid-cols-2 gap-6 animate-fade-in">
+                            <div className="space-y-2">
+                              <label className="text-[10px] font-mono text-neutral-400 uppercase block font-semibold">New Category Directory Name *</label>
+                              <input
+                                type="text"
+                                required
+                                placeholder="E.g., Systems Operations, Automation"
+                                value={newSkillCatName}
+                                onChange={(e) => setNewSkillCatName(e.target.value)}
+                                className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-700 focus:outline-none focus:ring-1 focus:ring-orange-500 transition-all font-mono"
+                              />
+                            </div>
+
+                            <div className="space-y-2">
+                              <label className="text-[10px] font-mono text-neutral-400 uppercase block font-semibold">Launcher Icon Representation</label>
+                              <select
+                                value={newSkillCatIcon}
+                                onChange={(e) => setNewSkillCatIcon(e.target.value)}
+                                className="w-full bg-neutral-950 border border-neutral-805 rounded-xl px-4 py-3 text-xs text-neutral-200 font-mono focus:outline-none focus:ring-1 focus:ring-orange-500"
+                              >
+                                <option value="server">Server (Network Systems)</option>
+                                <option value="monitor">Monitor (Frontend Platforms)</option>
+                                <option value="database">Database (Storage Engines)</option>
+                                <option value="layers">Layers (Systems Admin)</option>
+                                <option value="cpu">Cpu (Core Logic)</option>
+                                <option value="palette">Palette (Responsive Styling)</option>
+                              </select>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="space-y-4">
+                          <div className="flex justify-between items-center text-xs">
+                            <label className="text-[10px] font-mono text-neutral-400 uppercase tracking-wider block font-semibold">Proficiency Rating Level</label>
+                            <span className="text-xs font-mono text-orange-500 font-extrabold bg-orange-500/5 px-2.5 py-1 rounded border border-orange-500/10">
+                              {newSkillProficiency}% proficiency
+                            </span>
+                          </div>
+                          
+                          <input
+                            type="range"
+                            min="1"
+                            max="100"
+                            step="1"
+                            value={newSkillProficiency}
+                            onChange={(e) => setNewSkillProficiency(Number(e.target.value))}
+                            className="w-full h-1 bg-neutral-950 rounded-lg appearance-none cursor-pointer accent-orange-500 border border-neutral-900"
+                          />
+                          <div className="flex justify-between text-[9px] font-mono text-neutral-600">
+                            <span>0% (Junior Practitioner)</span>
+                            <span>50% (Competent Specialist)</span>
+                            <span>100% (Grandmaster Core Authority)</span>
+                          </div>
+                        </div>
+
+                        <button
+                          type="submit"
+                          className="py-3.5 px-6 bg-orange-500 cursor-pointer text-white font-mono text-xs uppercase tracking-widest hover:bg-orange-600 rounded-xl transition-all shadow-[0_0_15px_rgba(249,115,22,0.15)] flex items-center justify-center gap-1.5 font-bold"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>Sync Skill Specialty Points</span>
+                        </button>
+                      </form>
+                    </div>
+                  )}
+
+                  {adminActiveTab === "gallery" && (
+                    <div className="bg-neutral-900/10 border border-neutral-900/40 p-6 rounded-2xl space-y-6 animate-fade-in text-left">
+                      <div className="border-b border-neutral-900/50 pb-4">
+                        <h3 className="text-neutral-100 font-mono text-xs uppercase tracking-widest font-bold">Publish Dynamic Photo Node</h3>
+                        <p className="text-[11px] font-mono text-neutral-500 mt-1">Select an image from your desktop (limit 2MB), assign metadata labels, and broadcast it directly to the landing page photostream.</p>
+                      </div>
+
+                      <form onSubmit={handleAddGalleryImage} className="space-y-6">
+                        <div className="grid md:grid-cols-2 gap-6">
+                          <div className="space-y-2">
+                            <label className="text-[9px] font-mono text-neutral-400 uppercase tracking-widest block font-bold">Photo Title / Label</label>
+                            <input
+                              type="text"
+                              value={newGalleryTitle}
+                              onChange={(e) => setNewGalleryTitle(e.target.value)}
+                              placeholder="e.g., Baptiste - Cloud Hackathon Winner"
+                              className="w-full bg-neutral-950/60 border border-neutral-900 focus:border-orange-500/50 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none transition-all font-mono"
+                            />
+                          </div>
+                          
+                          <div className="space-y-2">
+                            <label className="text-[9px] font-mono text-neutral-400 uppercase tracking-widest block font-bold">Event Context / Aspect Description</label>
+                            <input
+                              type="text"
+                              value={newGalleryDesc}
+                              onChange={(e) => setNewGalleryDesc(e.target.value)}
+                              placeholder="e.g., Presenting scalable API clusters to high-profile developers in Kigali."
+                              className="w-full bg-neutral-950/60 border border-neutral-900 focus:border-orange-500/50 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none transition-all font-mono"
+                            />
+                          </div>
+                        </div>
+
+                        {/* File upload drag/drop zone */}
+                        <div className="space-y-2">
+                          <span className="text-[9px] font-mono text-neutral-400 uppercase tracking-widest block font-bold">Select Photo Asset from Desktop</span>
+                          <div className="relative border-2 border-dashed border-neutral-900 hover:border-orange-500/40 rounded-2xl p-6 bg-neutral-950/60 transition-colors flex flex-col items-center justify-center text-center">
+                            {newGalleryImage ? (
+                              <div className="space-y-4">
+                                <div className="w-56 h-36 mx-auto rounded-xl overflow-hidden border border-neutral-900 relative">
+                                  <img src={newGalleryImage} alt="Gallery item upload preview" className="w-full h-full object-cover" />
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setNewGalleryImage("")}
+                                  className="px-3 py-1.5 bg-neutral-900 hover:bg-neutral-800 text-[10px] font-mono text-red-500 hover:text-red-400 border border-neutral-850 rounded-lg transition-colors cursor-pointer"
+                                >
+                                  Remove Selected Image
+                                </button>
+                              </div>
+                            ) : (
+                              <>
+                                <Upload className="w-8 h-8 text-neutral-700 mb-2" />
+                                <span className="text-xs text-neutral-300 font-mono block font-medium">Drag-and-drop or Browse desktop files</span>
+                                <span className="text-[10px] text-neutral-500 font-mono block mt-1">JPEG, PNG, or GIF up to 2MB</span>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={handleGalleryImageChange}
+                                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                                />
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        <button
+                          type="submit"
+                          className="py-3.5 px-6 bg-orange-500 cursor-pointer text-white font-mono text-xs uppercase tracking-widest hover:bg-orange-600 rounded-xl transition-all shadow-lg shadow-orange-500/15 flex items-center justify-center gap-1.5 font-bold"
+                        >
+                          <Plus className="w-4.5 h-4.5" />
+                          <span>Publish Dynamic Photo Node</span>
+                        </button>
+                      </form>
+                    </div>
+                  )}
+
+                  {/* TAB CONTENT: ACTIVE NODES CATALOG / MANAGEMENT */}
+                  {adminActiveTab === "records" && (
+                    <div className="space-y-8 animate-fade-in">
+                      <div className="border-b border-neutral-900/50 pb-4">
+                        <h3 className="text-neutral-100 font-mono text-xs uppercase tracking-widest font-bold">Node Datastore Clusters</h3>
+                        <p className="text-[11px] font-mono text-neutral-555 mt-1">Audit existing projects array and specializations matrix. Pure operational dashboard drop features.</p>
+                      </div>
+
+                      {/* Cache reset panel */}
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-5 bg-neutral-950/80 border border-neutral-900 rounded-2xl gap-4 font-mono">
+                        <div>
+                          <h4 className="text-xs font-bold text-neutral-250 uppercase tracking-wide">Authorized State Flush</h4>
+                          <p className="text-[10.5px] text-neutral-550 mt-0.5">Flush custom memory configurations to recover default seed static profiles.</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleResetData}
+                          className="px-4 py-2.5 bg-red-500/10 border border-red-500/15 text-red-550 hover:text-red-400 hover:bg-red-500/15 rounded-xl text-[10px] uppercase font-bold tracking-wider cursor-pointer transition-all"
+                        >
+                          Reset System Catalog
+                        </button>
+                      </div>
+
+                      {/* Projects management list - BEAUTIFUL GOOD CARDS GRID */}
+                      <div className="space-y-4">
+                        <h4 className="text-xs font-mono font-bold uppercase tracking-widest text-neutral-300 border-b border-neutral-900/50 pb-2 flex items-center gap-2">
+                          <LayoutGrid className="w-4 h-4 text-orange-500" />
+                          <span>Currently Active Project Nodes ({projects.length})</span>
+                        </h4>
+                        
+                        <div className="grid md:grid-cols-2 gap-4 max-h-[350px] overflow-y-auto scrollbar-thin pr-1">
+                          {projects.map((proj) => (
+                            <div 
+                              key={proj.id} 
+                              className="p-4 bg-neutral-950/80 border border-neutral-900 rounded-2xl hover:border-orange-500/20 transition-all flex items-center justify-between gap-4 group"
+                            >
+                              <div className="flex items-center gap-3.5 overflow-hidden">
+                                <div className="w-12 h-12 rounded-xl overflow-hidden bg-neutral-900 border border-neutral-850 shrink-0">
+                                  <img 
+                                    src={getProjectImage(proj)} 
+                                    alt={proj.title} 
+                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
+                                    referrerPolicy="no-referrer" 
+                                  />
+                                </div>
+                                <div className="min-w-0">
+                                  <span className="font-semibold text-neutral-200 block truncate text-xs">{proj.title}</span>
+                                  <span className="text-[9px] text-neutral-500 block uppercase tracking-wider mt-0.5 truncate font-mono">{proj.category}</span>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteProject(proj.id)}
+                                className="p-2 rounded-lg border border-neutral-850 text-neutral-550 hover:text-red-500 hover:border-red-500/20 hover:bg-red-500/5 transition-all cursor-pointer shrink-0"
+                                title="Delete project node"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Technical skill matrix list - BEAUTIFUL GOOD CARDS */}
+                      <div className="space-y-4">
+                        <h4 className="text-xs font-mono font-bold uppercase tracking-widest text-neutral-300 border-b border-neutral-900/50 pb-2 flex items-center gap-2">
+                          <Cpu className="w-4 h-4 text-orange-500" />
+                          <span>Technical Skill Specializations</span>
+                        </h4>
+                        
+                        <div className="grid md:grid-cols-2 gap-4 max-h-[350px] overflow-y-auto scrollbar-thin pr-1">
+                          {skillCategories.map((cat) => (
+                            <div key={cat.id} className="p-4 bg-neutral-950/80 border border-neutral-900 rounded-2xl space-y-3">
+                              <div className="flex items-center justify-between border-b border-neutral-900/50 pb-2">
+                                <span className="font-bold text-orange-500 text-[11px] tracking-wider uppercase font-mono">{cat.name}</span>
+                                <span className="text-[9px] font-mono text-neutral-600">Specialty Set</span>
+                              </div>
+                              <div className="space-y-1.5 pt-0.5">
+                                {cat.skills.length === 0 ? (
+                                  <span className="text-[10px] text-neutral-600 block italic leading-none font-mono">No nodes configured</span>
+                                ) : (
+                                  cat.skills.map((sk) => (
+                                    <div key={sk.name} className="flex items-center justify-between gap-3 text-neutral-400 py-1 px-1.5 rounded-lg hover:bg-neutral-900/30 transition-all font-mono text-[10.5px]">
+                                      <span className="truncate text-neutral-300 font-medium">{sk.name} ({sk.proficiency}%)</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteSkill(cat.id, sk.name)}
+                                        className="text-neutral-500 hover:text-red-400 hover:underline text-[9.5px] cursor-pointer font-bold uppercase tracking-wider"
+                                      >
+                                        Delete
+                                      </button>
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Gallery Assets Registry Management */}
+                      <div className="space-y-4 pt-2">
+                        <h4 className="text-xs font-mono font-bold uppercase tracking-widest text-neutral-300 border-b border-neutral-900/50 pb-2 flex items-center gap-2">
+                          <Camera className="w-4 h-4 text-orange-500" />
+                          <span>Currently Active Photostream Panels ({galleryImages.length})</span>
+                        </h4>
+
+                        <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 max-h-[350px] overflow-y-auto scrollbar-thin pr-1">
+                          {galleryImages.map((p) => (
+                            <div
+                              key={p.id}
+                              className="p-3 bg-neutral-950/80 border border-neutral-900 hover:border-orange-500/20 rounded-2xl flex flex-col justify-between gap-3 group transition-all"
+                            >
+                              <div className="space-y-2">
+                                <div className="aspect-[4/3] rounded-xl overflow-hidden bg-neutral-900 border border-neutral-850 relative">
+                                  <img
+                                    src={p.url}
+                                    alt={p.title}
+                                    className="w-full h-full object-cover group-hover:scale-103 transition-transform duration-300"
+                                    referrerPolicy="no-referrer"
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <span className="font-semibold text-neutral-200 block truncate text-xs">{p.title}</span>
+                                  <p className="text-[10px] text-neutral-500 line-clamp-2 leading-relaxed font-mono">{p.desc}</p>
+                                </div>
+                              </div>
+                              
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (window.confirm("Purge this photostream frame? This trace will be permanently deleted from dynamic stores.")) {
+                                    handleDeleteGalleryImage(p.id);
+                                  }
+                                }}
+                                className="w-full py-1.5 bg-neutral-900 hover:bg-red-500/10 border border-neutral-850 hover:border-red-500/20 text-neutral-450 hover:text-red-400 font-mono text-[9px] uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer font-bold mt-2"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>Purge Asset Node</span>
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                    </div>
+                  )}
+
+                </div>
+
+              </div>
+
+            </div>
+          )}
+
+        </div>
+
+        {/* Console operational footer */}
+        <footer className="py-8 border-t border-neutral-900 mt-auto bg-neutral-950/80 text-center text-[10px] font-mono text-neutral-600 uppercase tracking-widest">
+          Tuyishime Jean Baptiste — Administrative Node v1.2.6
+        </footer>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100 font-sans selection:bg-orange-500 selection:text-neutral-950 overflow-x-hidden relative">
@@ -462,7 +1552,13 @@ export default function App() {
       >
         <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
           <a
-            href="#hero"
+            href={currentPath === "/" ? "#hero" : "/"}
+            onClick={(e) => {
+              if (currentPath !== "/") {
+                e.preventDefault();
+                navigateTo("/");
+              }
+            }}
             className="text-neutral-100 font-mono text-sm tracking-widest font-semibold flex items-center gap-1.5 focus:outline-none focus:ring-1 focus:ring-orange-500"
           >
             TJB<span className="text-orange-500">&lt;/&gt;</span>
@@ -474,7 +1570,17 @@ export default function App() {
               <a
                 key={section}
                 href={`#${section}`}
-                onClick={() => setActiveTab(section)}
+                onClick={(e) => {
+                  if (currentPath !== "/") {
+                    e.preventDefault();
+                    navigateTo("/");
+                    setTimeout(() => {
+                      const el = document.getElementById(section);
+                      if (el) el.scrollIntoView({ behavior: "smooth" });
+                    }, 100);
+                  }
+                  setActiveTab(section);
+                }}
                 className={`text-xs uppercase tracking-widest font-medium transition-colors duration-200 relative py-1.5 ${
                   activeTab === section ? "text-orange-500" : "text-neutral-400 hover:text-neutral-100"
                 }`}
@@ -571,7 +1677,15 @@ export default function App() {
                 <a
                   key={section}
                   href={`#${section}`}
-                  onClick={() => {
+                  onClick={(e) => {
+                    if (currentPath !== "/") {
+                      e.preventDefault();
+                      navigateTo("/");
+                      setTimeout(() => {
+                        const el = document.getElementById(section);
+                        if (el) el.scrollIntoView({ behavior: "smooth" });
+                      }, 100);
+                    }
                     setActiveTab(section);
                     setIsMobileMenuOpen(false);
                   }}
@@ -823,7 +1937,7 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-4 pt-4 w-full">
+              <div className="flex flex-wrap items-center gap-4 pt-4 w-full">
                 <LiquidButton
                    onClick={() => setIsAIChatOpen(true)}
                   className="text-white border border-orange-500/30 rounded-full font-mono font-medium"
@@ -832,6 +1946,19 @@ export default function App() {
                   <Sparkles className="w-4 h-4 text-orange-500" />
                   <span>{t.aiButtonText}</span>
                 </LiquidButton>
+
+                <button
+                  onClick={() => {
+                    if (galleryImages.length > 0) {
+                      setActiveGalleryImage(galleryImages[0].url);
+                    }
+                    setIsGalleryOpen(true);
+                  }}
+                  className="px-6 py-3 bg-neutral-900 hover:bg-neutral-850 text-neutral-300 hover:text-white border border-neutral-850 hover:border-neutral-700 rounded-full font-mono font-medium text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-black/30 hover:scale-[1.01]"
+                >
+                  <Camera className="w-4 h-4 text-orange-500 animate-pulse" />
+                  <span>Interactive Photostream ({galleryImages.length})</span>
+                </button>
                 <a href="#contact" className="inline-block">
                   <LiquidButton size="xl" className="text-neutral-350 border border-neutral-850 rounded-full hover:text-white font-mono">
                     <Mail className="w-3.5 h-3.5 text-neutral-500 hover:text-orange-500 transition-colors" />
@@ -865,140 +1992,86 @@ export default function App() {
             </p>
           </div>
 
-          <div className="grid lg:grid-cols-12 gap-12">
-            
-            {/* Left selector menu buttons */}
-            <div className="lg:col-span-4 flex flex-col gap-3.5">
-              {SKILL_CATEGORIES.map((cat) => (
-                <button
-                  key={cat.id}
-                  onClick={() => setSelectedSkillCategory(cat.id)}
-                  className={`relative overflow-hidden flex items-center justify-between p-5 rounded-2xl border text-left transition-all duration-300 cursor-pointer group ${
-                    selectedSkillCategory === cat.id
-                      ? "bg-neutral-900/80 border-orange-500/40 shadow-[0_0_20px_rgba(249,115,22,0.15)] backdrop-blur-md"
-                      : "bg-neutral-950/10 border-neutral-900/60 text-neutral-400 hover:bg-neutral-900/40 hover:text-neutral-200"
-                  }`}
-                >
-                  <div className="flex items-center gap-4">
-                    <span className={`shrink-0 p-2.5 rounded-lg border transition-colors duration-300 ${
-                      selectedSkillCategory === cat.id 
-                        ? "bg-orange-500/10 border-orange-500/20 text-orange-500" 
-                        : "bg-neutral-950 border-neutral-850 text-neutral-500 group-hover:text-orange-500/80"
-                    }`}>
-                      {renderSkillIcon(cat.icon)}
-                    </span>
-                    <div>
-                      <span className="text-xs uppercase tracking-wider font-semibold font-mono block">
-                        {cat.name}
+          <div className="grid md:grid-cols-2 gap-8 lg:gap-10">
+            {skillCategories.map((cat) => (
+              <motion.div
+                key={cat.id}
+                className="relative overflow-hidden rounded-3xl border border-neutral-900/60 bg-neutral-900/15 p-6 md:p-8 hover:border-orange-500/30 hover:bg-neutral-900/25 transition-all duration-300 shadow-xl flex flex-col justify-between group select-none"
+                whileHover={{ y: -6 }}
+                transition={{ type: "spring", duration: 0.4 }}
+              >
+                {/* Embedded background abstract glow */}
+                <div className="absolute top-0 right-0 w-[160px] h-[160px] rounded-full bg-orange-500/[0.015] group-hover:bg-orange-500/[0.035] blur-[50px] transition-all duration-500 pointer-events-none" />
+                
+                <div className="space-y-6">
+                  {/* Category Header */}
+                  <div className="flex items-center justify-between border-b border-neutral-900/40 pb-4">
+                    <div className="flex items-center gap-4">
+                      <span className="shrink-0 p-3 rounded-2xl bg-neutral-950 border border-neutral-850 text-orange-500 group-hover:text-orange-400 group-hover:scale-110 transition-all duration-300">
+                        {renderSkillIcon(cat.icon)}
                       </span>
-                      <span className="text-[9px] font-mono text-neutral-500 uppercase tracking-widest mt-0.5 block">
-                        Telemetry {selectedSkillCategory === cat.id ? t.expTelemetryActive : t.expTelemetryInactive}
-                      </span>
-                    </div>
-                  </div>
-                  
-                  {/* Blinking status light on categories */}
-                  <div className="flex items-center gap-2">
-                    <span className="relative flex h-2 w-2">
-                      <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                        selectedSkillCategory === cat.id ? "bg-orange-400" : "bg-neutral-800"
-                      }`} />
-                      <span className={`relative inline-flex rounded-full h-2 w-2 ${
-                        selectedSkillCategory === cat.id ? "bg-orange-500" : "bg-neutral-750"
-                      }`} />
-                    </span>
-                  </div>
-                </button>
-              ))}
-
-              <div className="p-5 rounded-2xl border border-neutral-900/60 bg-neutral-950/30 backdrop-blur-sm font-mono text-[11px] text-neutral-500 space-y-3 mt-2">
-                <p className="text-neutral-400 uppercase tracking-widest font-bold text-[9px] border-b border-neutral-900 pb-2">Production Standards Audits</p>
-                <div className="flex items-center gap-2.5">
-                  <div className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_6px_#22c55e]" />
-                  <span>Strict TypeScript compilation</span>
-                </div>
-                <div className="flex items-center gap-2.5">
-                  <div className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_6px_#22c55e]" />
-                  <span>Query logging & latency metrics</span>
-                </div>
-                <div className="flex items-center gap-2.5">
-                  <div className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_6px_#22c55e]" />
-                  <span>OWASP secure header validation</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Right progress sliders matrix */}
-            <div className="lg:col-span-8 bg-neutral-900/20 border border-neutral-900 rounded-3xl p-8 relative flex flex-col justify-between min-h-[420px] backdrop-blur-md shadow-2xl">
-              <div className="absolute inset-x-0 top-0 h-[100px] rounded-full bg-orange-500/2 blur-[40px] pointer-events-none" />
-              
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={selectedSkillCategory}
-                  initial={{ opacity: 0, y: 15 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -15 }}
-                  transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-                  className="space-y-6 flex-1 flex flex-col justify-between"
-                >
-                  <div>
-                    <h3 className="text-neutral-200 font-mono text-[10px] uppercase tracking-[0.2em] font-bold mb-8 flex items-center gap-2">
-                      <span className="text-neutral-500">Audit Node:</span>
-                      <span className="text-orange-500 bg-orange-500/5 px-2.5 py-1 border border-orange-500/10 rounded-full">
-                        {SKILL_CATEGORIES.find((c) => c.id === selectedSkillCategory)?.name}
-                      </span>
-                    </h3>
-
-                    <div className="grid md:grid-cols-2 gap-x-8 gap-y-6">
-                      {SKILL_CATEGORIES.find((c) => c.id === selectedSkillCategory)?.skills.map((skill) => (
-                        <div key={skill.name} className="space-y-2 font-mono group p-3.5 rounded-xl border border-transparent hover:border-neutral-900/60 hover:bg-neutral-950/20 transition-all duration-300">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="text-neutral-300 group-hover:text-neutral-100 transition-colors font-medium">{skill.name}</span>
-                            <span className="text-orange-500 font-extrabold text-[11px] bg-orange-500/5 px-1.5 py-0.5 rounded border border-orange-500/10">{skill.proficiency}%</span>
-                          </div>
-                          
-                          {/* Dynamic custom styled gauge track slider */}
-                          <div className="relative w-full h-2 bg-neutral-950 rounded-full overflow-hidden border border-neutral-900/80 p-[1px]">
-                            <motion.div
-                              initial={{ width: 0 }}
-                              animate={{ width: `${skill.proficiency}%` }}
-                              transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
-                              className="h-full bg-gradient-to-r from-orange-500 to-amber-400 rounded-full shadow-[0_0_8px_rgba(249,115,22,0.3)]"
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Built-in live simulation telemetry console */}
-                  <div className="mt-8 pt-4 border-t border-neutral-900/60">
-                    <div className="bg-neutral-950 rounded-xl p-4 border border-neutral-900 text-[11px] font-mono relative overflow-hidden">
-                      <div className="absolute top-2 right-2 flex gap-1">
-                        <div className="w-1.5 h-1.5 rounded-full bg-neutral-800" />
-                        <div className="w-1.5 h-1.5 rounded-full bg-neutral-800" />
+                      <div>
+                        <h3 className="text-sm font-mono uppercase tracking-[0.15em] font-bold text-neutral-100">
+                          {cat.name}
+                        </h3>
+                        <span className="text-[10px] font-mono text-neutral-500 uppercase tracking-widest mt-0.5 block">
+                          Telemetry Operational Matrix
+                        </span>
                       </div>
-                      <span className="text-orange-500 font-bold block mb-1.5 uppercase tracking-wider text-[9px]">[TJB-Telemetry-Auditor://live-node]</span>
-                      <p className="text-neutral-450 leading-relaxed font-light">
-                        {selectedSkillCategory === "frontend" && (
-                          "// SYSTEM: Production builds compiled under tight TS flags. Dynamic route compression enabled. Strict DOM-performance layouts tested across 12 mobile & desktop viewports."
-                        )}
-                        {selectedSkillCategory === "backend" && (
-                          "// SYSTEM: Core server proxy rates validated at 15k requests/minute. Memory index footprints trimmed safely using cluster management and Redis micro-caching controllers."
-                        )}
-                        {selectedSkillCategory === "data" && (
-                          "// SYSTEM: Relational foreign constraint indices matched. B-Tree leaf fragmentation checked. Zero sequential table scans reported on millions of production unit records."
-                        )}
-                        {selectedSkillCategory === "infrastructure" && (
-                          "// SYSTEM: Secure container isolation profiles verified. Automated Docker registry health checks returned 200 OK. Encrypted TLS keys cached in server security variables."
-                        )}
-                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-500" />
+                      </span>
                     </div>
                   </div>
-                </motion.div>
-              </AnimatePresence>
-            </div>
 
+                  {/* Skills Progress lists */}
+                  <div className="grid gap-x-6 gap-y-5 pt-1">
+                    {cat.skills.map((skill) => (
+                      <div key={skill.name} className="space-y-1.5 font-mono">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-neutral-300 font-medium group-hover:text-neutral-100 transition-colors">
+                            {skill.name}
+                          </span>
+                          <span className="text-orange-500 font-extrabold text-[10px] bg-orange-500/5 px-2 py-0.5 rounded border border-orange-500/10">
+                            {skill.proficiency}%
+                          </span>
+                        </div>
+                        
+                        {/* Custom styled progress slider */}
+                        <div className="relative w-full h-1.5 bg-neutral-950 rounded-full overflow-hidden border border-neutral-900/80 p-[0.5px]">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${skill.proficiency}%` }}
+                            transition={{ duration: 1.2, ease: "easeOut" }}
+                            className="h-full bg-gradient-to-r from-orange-500 to-amber-400 rounded-full shadow-[0_0_6px_rgba(249,115,22,0.25)]"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Micro operational metrics module at bottom */}
+                <div className="mt-8 pt-4 border-t border-neutral-900/40">
+                  <div className="bg-neutral-950 rounded-xl p-3.5 border border-neutral-900 text-[10.5px] font-mono relative overflow-hidden">
+                    <span className="text-[9px] font-bold text-orange-500 uppercase tracking-wider block mb-1">
+                      [TJB-Telemetry-Auditor://live-node]
+                    </span>
+                    <p className="text-neutral-500 leading-relaxed font-light">
+                      {cat.id === "frontend" && "// SYSTEM: Production builds compiled under tight TS flags. Dynamic asset compression. Checked layout viewports."}
+                      {cat.id === "backend" && "// SYSTEM: Core API rates validated. Footprints trimmed down using clusters and high-efficiency Redis microcaches."}
+                      {cat.id === "data" && "// SYSTEM: Relational schema indices parsed. B-Tree leaf fragmentation checked. Zero sequential table scans."}
+                      {cat.id === "infrastructure" && "// SYSTEM: Secure container configs compiled. Health triggers returned 205 OK. Admin-auth tokens parsed."}
+                      {!["frontend", "backend", "data", "infrastructure"].includes(cat.id) && `// SYSTEM: Custom admin parameters synchronized successfully. Initialized telemetry tracker for ${cat.name}.`}
+                    </p>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
           </div>
         </div>
       </motion.section>
@@ -1026,7 +2099,7 @@ export default function App() {
           </div>
 
           <div className="grid md:grid-cols-2 gap-8 lg:gap-10">
-            {PROJECTS.map((project) => (
+            {projects.map((project) => (
               <motion.div
                 key={project.id}
                 layoutId={`project-container-${project.id}`}
@@ -1036,6 +2109,15 @@ export default function App() {
               >
                 {/* Embedded background abstract glow */}
                 <div className="absolute top-0 right-0 w-[180px] h-[180px] rounded-full bg-orange-500/[0.015] group-hover:bg-orange-500/[0.035] blur-[50px] transition-all duration-500 pointer-events-none" />
+
+                <div className="w-full h-48 overflow-hidden border-b border-neutral-900 bg-neutral-950 relative">
+                  <img
+                    src={getProjectImage(project)}
+                    alt={project.title}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
 
                 <div className="p-8 space-y-6 flex-1 flex flex-col justify-between">
                   <div className="space-y-4">
@@ -1118,6 +2200,15 @@ export default function App() {
                   >
                     <X className="w-5 h-5" />
                   </button>
+                </div>
+
+                <div className="w-full aspect-video rounded-xl overflow-hidden border border-neutral-900 bg-neutral-950">
+                  <img
+                    src={getProjectImage(selectedProject)}
+                    alt={selectedProject.title}
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
                 </div>
 
                 <div className="space-y-4">
@@ -1214,21 +2305,25 @@ export default function App() {
               {/* Main Expanded View */}
               <div className="flex-1 bg-neutral-900/10 flex items-center justify-center p-6 relative min-h-[300px] md:min-h-0 border-r border-neutral-900/40">
                 <AnimatePresence mode="wait">
-                  <motion.div
-                    key={activeGalleryImage || BAPTISTE_GALLERY[0].url}
-                    initial={{ opacity: 0, scale: 0.98 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.98 }}
-                    transition={{ duration: 0.25 }}
-                    className="w-full h-full max-h-[40vh] md:max-h-[60vh] flex items-center justify-center relative rounded-2xl overflow-hidden"
-                  >
-                    <img
-                      src={activeGalleryImage || BAPTISTE_GALLERY[0].url}
-                      alt={BAPTISTE_GALLERY.find(p => p.url === (activeGalleryImage || BAPTISTE_GALLERY[0].url))?.title || "Baptiste photo"}
-                      className="max-w-full max-h-full object-contain rounded-xl shadow-lg shadow-black/50"
-                      referrerPolicy="no-referrer"
-                    />
-                  </motion.div>
+                  {galleryImages.length > 0 ? (
+                    <motion.div
+                      key={activeGalleryImage || galleryImages[0].url}
+                      initial={{ opacity: 0, scale: 0.98 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.98 }}
+                      transition={{ duration: 0.25 }}
+                      className="w-full h-full max-h-[40vh] md:max-h-[60vh] flex items-center justify-center relative rounded-2xl overflow-hidden"
+                    >
+                      <img
+                        src={activeGalleryImage || galleryImages[0].url}
+                        alt={galleryImages.find(p => p.url === (activeGalleryImage || galleryImages[0].url))?.title || "Baptiste photo"}
+                        className="max-w-full max-h-full object-contain rounded-xl shadow-lg shadow-black/50"
+                        referrerPolicy="no-referrer"
+                      />
+                    </motion.div>
+                  ) : (
+                    <div className="text-neutral-500 font-mono text-xs">No gallery images registered.</div>
+                  )}
                 </AnimatePresence>
               </div>
 
@@ -1241,11 +2336,11 @@ export default function App() {
                   
                   {/* Title and Description */}
                   {(() => {
-                    const activeObj = BAPTISTE_GALLERY.find(p => p.url === (activeGalleryImage || BAPTISTE_GALLERY[0].url));
+                    const activeObj = galleryImages.find(p => p.url === (activeGalleryImage || (galleryImages[0]?.url || "")));
                     return (
                       <div className="space-y-3">
                         <h3 className="text-xl font-bold text-neutral-100 tracking-tight">
-                          {activeObj?.title || "Baptiste Card"}
+                          {activeObj?.title || (language === "rw" ? "Idosiye Y'ifoto" : "Baptiste Card")}
                         </h3>
                         <p className="text-xs font-light text-neutral-400 leading-relaxed font-mono bg-neutral-900/30 p-3 rounded-xl border border-neutral-900">
                           {activeObj?.desc || "A custom developer metadata aspect snapshot."}
@@ -1261,9 +2356,9 @@ export default function App() {
                     <span className="text-[10px] uppercase font-mono tracking-wider text-neutral-500 block mb-3">
                       {language === "rw" ? "Hitamo Ifoto" : "Select Frame"}
                     </span>
-                    <div className="grid grid-cols-5 gap-2">
-                      {BAPTISTE_GALLERY.map((p) => {
-                        const isSelected = (activeGalleryImage || BAPTISTE_GALLERY[0].url) === p.url;
+                    <div className="grid grid-cols-5 gap-2 max-h-[140px] overflow-y-auto pr-1">
+                      {galleryImages.map((p) => {
+                        const isSelected = (activeGalleryImage || (galleryImages[0]?.url || "")) === p.url;
                         return (
                           <button
                             key={p.id}
@@ -1295,10 +2390,13 @@ export default function App() {
                   <div className="space-y-2 border-t border-neutral-900/60 pt-4">
                     <button
                       onClick={() => {
-                        const url = window.location.origin + (activeGalleryImage || BAPTISTE_GALLERY[0].url);
-                        navigator.clipboard.writeText(url);
-                        setCopiedGalleryIndex(true);
-                        setTimeout(() => setCopiedGalleryIndex(false), 2000);
+                        const currentImg = activeGalleryImage || (galleryImages[0]?.url || "");
+                        if (currentImg) {
+                          const url = currentImg.startsWith("data:") ? currentImg : window.location.origin + currentImg;
+                          navigator.clipboard.writeText(url);
+                          setCopiedGalleryIndex(true);
+                          setTimeout(() => setCopiedGalleryIndex(false), 2000);
+                        }
                       }}
                       className="w-full px-4 py-2 bg-neutral-900 border border-neutral-850 rounded-xl hover:border-neutral-700 transition-all font-mono text-[10px] text-neutral-300 hover:text-white uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer focus:outline-none"
                     >
@@ -1306,16 +2404,18 @@ export default function App() {
                       <span>{copiedGalleryIndex ? (language === "rw" ? "YAKOPOWE!" : "COPIED!") : (language === "rw" ? "Koporora Inzira" : "Copy Direct Link")}</span>
                     </button>
                     
-                    <a
-                      href={activeGalleryImage || BAPTISTE_GALLERY[0].url}
-                      download={`baptiste_portrait_${BAPTISTE_GALLERY.find(p => p.url === (activeGalleryImage || BAPTISTE_GALLERY[0].url))?.id || "photo"}.png`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="w-full px-4 py-2 bg-orange-500 text-neutral-950 font-mono font-bold text-[10px] rounded-xl hover:bg-orange-400 transition-all uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      <span>{language === "rw" ? "Manura Ifoto" : "Download High-Res"}</span>
-                    </a>
+                    {galleryImages.length > 0 && (
+                      <a
+                        href={activeGalleryImage || galleryImages[0].url}
+                        download={`baptiste_portrait_${galleryImages.find(p => p.url === (activeGalleryImage || galleryImages[0].url))?.id || "photo"}.png`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full px-4 py-2 bg-orange-500 text-neutral-950 font-mono font-bold text-[10px] rounded-xl hover:bg-orange-400 transition-all uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>{language === "rw" ? "Manura Ifoto" : "Download High-Res"}</span>
+                      </a>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1563,48 +2663,110 @@ export default function App() {
               <div className="space-y-4 max-w-md font-mono text-xs">
                 <a
                   href="mailto:fizzorafiki@gmail.com"
-                  className="flex items-center gap-4 p-4 rounded-xl border border-neutral-900 bg-neutral-950/20 hover:border-orange-500/20 hover:bg-neutral-900/10 transition-colors cursor-pointer group"
+                  className="flex items-center gap-4 p-4.5 rounded-2xl border border-neutral-900/60 bg-neutral-950/20 hover:border-orange-500/30 hover:bg-neutral-900/10 hover:-translate-y-1 transition-all duration-300 cursor-pointer group shadow-lg"
                 >
-                  <div className="w-10 h-10 rounded-lg bg-neutral-900 border border-neutral-850 flex items-center justify-center group-hover:border-orange-500/20">
-                    <Mail className="w-4 h-4 text-neutral-400 group-hover:text-orange-500 transition-colors" />
+                  <div className="w-11 h-11 rounded-xl bg-neutral-900 border border-neutral-850 flex items-center justify-center group-hover:border-orange-500/20 transition-colors">
+                    <Mail className="w-5 h-5 text-neutral-400 group-hover:text-orange-500 transition-colors" />
                   </div>
                   <div>
-                    <span className="text-[10px] text-neutral-500 block uppercase font-bold mb-0.5">{t.conDirectEmail}</span>
-                    <span className="text-neutral-200 group-hover:text-orange-500 transition-colors">fizzorafiki@gmail.com</span>
+                    <span className="text-[10px] text-neutral-500 block uppercase font-mono tracking-wider font-bold mb-0.5">{t.conDirectEmail}</span>
+                    <span className="text-neutral-200 group-hover:text-orange-400 text-xs transition-colors font-medium">fizzorafiki@gmail.com</span>
                   </div>
                 </a>
 
+                {/* Direct audio/voice call */}
                 <a
-                  href="tel:+250780000000"
-                  className="flex items-center gap-4 p-4 rounded-xl border border-neutral-900 bg-neutral-950/20 hover:border-orange-500/20 hover:bg-neutral-900/10 transition-colors cursor-pointer group"
+                  href="tel:0793373177"
+                  className="flex items-center gap-4 p-4.5 rounded-2xl border border-neutral-900/60 bg-neutral-950/20 hover:border-orange-500/30 hover:bg-neutral-900/10 hover:-translate-y-1 transition-all duration-300 cursor-pointer group shadow-lg"
                 >
-                  <div className="w-10 h-10 rounded-lg bg-neutral-900 border border-neutral-850 flex items-center justify-center group-hover:border-orange-500/20">
-                    <Phone className="w-4 h-4 text-neutral-400 group-hover:text-orange-500 transition-colors" />
+                  <div className="w-11 h-11 rounded-xl bg-neutral-900 border border-neutral-850 flex items-center justify-center group-hover:border-orange-500/20 transition-colors">
+                    <Phone className="w-5 h-5 text-neutral-400 group-hover:text-orange-500 transition-colors" />
                   </div>
                   <div>
-                    <span className="text-[10px] text-neutral-500 block uppercase font-bold mb-0.5">{t.conContactNode}</span>
-                    <span className="text-neutral-200 group-hover:text-orange-500 transition-colors">+250 780 000 000</span>
+                    <span className="text-[10px] text-neutral-500 block uppercase font-mono tracking-wider font-bold mb-0.5">{t.conContactNode} (Voice Node)</span>
+                    <span className="text-neutral-200 group-hover:text-orange-400 text-xs transition-colors font-medium">0793373177</span>
+                  </div>
+                </a>
+
+                {/* Direct Whatsapp link */}
+                <a
+                  href="https://wa.me/250793373177"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-4 p-4.5 rounded-2xl border border-neutral-900/60 bg-neutral-950/20 hover:border-orange-500/30 hover:bg-neutral-900/10 hover:-translate-y-1 transition-all duration-300 cursor-pointer group shadow-lg"
+                >
+                  <div className="w-11 h-11 rounded-xl bg-neutral-900 border border-neutral-850 flex items-center justify-center group-hover:border-orange-500/20 transition-colors">
+                    <MessageSquare className="w-5 h-5 text-neutral-400 group-hover:text-orange-500 transition-colors" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-neutral-550 block uppercase font-mono tracking-wider font-bold mb-0.5">Instant WhatsApp Secure Chat</span>
+                    <span className="text-neutral-200 group-hover:text-orange-400 text-xs transition-colors font-medium">0793373177 (Chat live)</span>
                   </div>
                 </a>
               </div>
 
-              {/* Github and socials */}
-              <div className="space-y-2 mt-auto">
-                <h4 className="text-[10px] font-mono text-neutral-600 uppercase tracking-widest font-semibold">{t.conSocialTitle}</h4>
-                <div className="flex gap-2">
+              {/* Improved social grid with fizzorafiki handles */}
+              <div className="space-y-4 mt-8 md:mt-2">
+                <h4 className="text-[10px] font-mono text-neutral-550 uppercase tracking-[0.25em] font-bold">{t.conSocialTitle}</h4>
+                <div className="grid grid-cols-2 gap-3 max-w-md">
                   <a
-                    href="https://github.com"
+                    href="https://github.com/fizzorafiki"
                     target="_blank"
-                    className="w-10 h-10 rounded-lg bg-neutral-905 border border-neutral-900/70 hover:border-orange-500/20 text-neutral-400 hover:text-neutral-100 transition-colors flex items-center justify-center cursor-pointer"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-3 p-3.5 rounded-2xl border border-neutral-900/60 bg-neutral-950/20 hover:border-orange-500/30 hover:bg-neutral-900/10 transition-all duration-300 cursor-pointer group shadow-md"
                   >
-                    <Github className="w-4 h-4" />
+                    <div className="w-8.5 h-8.5 rounded-xl bg-neutral-900 border border-neutral-850 flex items-center justify-center group-hover:border-orange-500/20 transition-all">
+                      <Github className="w-4 h-4 text-neutral-450 group-hover:text-orange-500 transition-colors" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-[9px] font-mono text-neutral-550 block uppercase font-bold tracking-wider">GitHub</span>
+                      <span className="text-[11px] font-mono text-neutral-300 truncate block group-hover:text-neutral-100 font-medium">fizzorafiki</span>
+                    </div>
                   </a>
+
                   <a
-                    href="https://linkedin.com"
+                    href="https://linkedin.com/in/fizzorafiki"
                     target="_blank"
-                    className="w-10 h-10 rounded-lg bg-neutral-905 border border-neutral-900/70 hover:border-orange-500/20 text-neutral-400 hover:text-neutral-100 transition-colors flex items-center justify-center cursor-pointer"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-3 p-3.5 rounded-2xl border border-neutral-900/60 bg-neutral-950/20 hover:border-orange-500/30 hover:bg-neutral-900/10 transition-all duration-300 cursor-pointer group shadow-md"
                   >
-                    <Linkedin className="w-4 h-4" />
+                    <div className="w-8.5 h-8.5 rounded-xl bg-neutral-900 border border-neutral-850 flex items-center justify-center group-hover:border-orange-500/20 transition-all">
+                      <Linkedin className="w-4 h-4 text-neutral-450 group-hover:text-orange-500 transition-colors" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-[9px] font-mono text-neutral-550 block uppercase font-bold tracking-wider">LinkedIn</span>
+                      <span className="text-[11px] font-mono text-neutral-300 truncate block group-hover:text-neutral-100 font-medium font-mono">fizzorafiki</span>
+                    </div>
+                  </a>
+
+                  <a
+                    href="https://instagram.com/fizzorafiki"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-3 p-3.5 rounded-2xl border border-neutral-900/60 bg-neutral-950/20 hover:border-orange-500/30 hover:bg-neutral-900/10 transition-all duration-300 cursor-pointer group shadow-md"
+                  >
+                    <div className="w-8.5 h-8.5 rounded-xl bg-neutral-900 border border-neutral-850 flex items-center justify-center group-hover:border-orange-500/20 transition-all">
+                      <Instagram className="w-4 h-4 text-neutral-450 group-hover:text-orange-500 transition-colors" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-[9px] font-mono text-neutral-550 block uppercase font-bold tracking-wider">Instagram</span>
+                      <span className="text-[11px] font-mono text-neutral-300 truncate block group-hover:text-neutral-100 font-medium">fizzorafiki</span>
+                    </div>
+                  </a>
+
+                  <a
+                    href="https://x.com/fizzorafiki"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-3 p-3.5 rounded-2xl border border-neutral-900/60 bg-neutral-950/20 hover:border-orange-500/30 hover:bg-neutral-900/10 transition-all duration-300 cursor-pointer group shadow-md"
+                  >
+                    <div className="w-8.5 h-8.5 rounded-xl bg-neutral-900 border border-neutral-850 flex items-center justify-center group-hover:border-orange-500/20 transition-all">
+                      <Twitter className="w-4 h-4 text-neutral-450 group-hover:text-orange-500 transition-colors" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-[9px] font-mono text-neutral-550 block uppercase font-bold tracking-wider">Twitter</span>
+                      <span className="text-[11px] font-mono text-neutral-300 truncate block group-hover:text-neutral-100 font-medium">fizzorafiki</span>
+                    </div>
                   </a>
                 </div>
               </div>
@@ -1739,8 +2901,18 @@ export default function App() {
             <span className="text-neutral-600">{t.footerCopyright} &copy; {new Date().getFullYear()}</span>
           </div>
 
-          <div className="flex items-center gap-5 text-neutral-500 hover:text-neutral-400 text-xs font-mono">
+          <div className="flex items-center gap-4 text-neutral-500 text-xs font-mono">
             <span>{t.footerRights}</span>
+            <span className="text-neutral-850">|</span>
+            <button
+              id="admin-console-trigger"
+              onClick={() => navigateTo("/admin")}
+              className="flex items-center gap-1.5 text-neutral-600 hover:text-orange-500 transition-colors cursor-pointer font-bold uppercase tracking-wider"
+              title="System Control Gate"
+            >
+              <Lock className="w-3.5 h-3.5" />
+              <span>Console Login</span>
+            </button>
           </div>
         </div>
       </footer>
@@ -1856,6 +3028,594 @@ export default function App() {
                   <Send className="w-4 h-4" />
                 </button>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Dynamic Master Control Admin Portal Panel */}
+      <AnimatePresence>
+        {isAdminModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            {/* Dark glass backdrop cover */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => {
+                setIsAdminModalOpen(false);
+                setAdminError("");
+                setAdminSuccessMsg("");
+              }}
+              className="absolute inset-0 bg-neutral-950/85 backdrop-blur-md"
+            />
+
+            {/* Panel box */}
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 15 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 15 }}
+              transition={{ type: "spring", duration: 0.45, bounce: 0.1 }}
+              className="relative w-full max-w-4xl bg-neutral-950 border border-neutral-900 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] z-10"
+            >
+              {/* Header */}
+              <div className="p-6 bg-neutral-900/40 border-b border-neutral-900 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="p-2 bg-orange-500/10 border border-orange-500/20 text-orange-500 rounded-xl">
+                    <Settings className="w-5 h-5 animate-[spin_8s_linear_infinite]" />
+                  </span>
+                  <div>
+                    <h3 className="font-bold text-neutral-100 text-base flex items-center gap-2">
+                      <span>Portfolio Administration Node</span>
+                      {isAdminLoggedIn && (
+                        <span className="px-2 py-0.5 text-[9px] font-mono tracking-widest text-green-400 bg-green-500/5 border border-green-500/15 rounded-full uppercase">
+                          Authorized Access
+                        </span>
+                      )}
+                    </h3>
+                    <p className="text-[11px] font-mono text-neutral-500 mt-0.5">Control pipeline registers & asset declarations</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setIsAdminModalOpen(false);
+                    setAdminError("");
+                    setAdminSuccessMsg("");
+                  }}
+                  className="p-2 rounded-lg border border-neutral-900 hover:bg-neutral-900 text-neutral-400 hover:text-neutral-100 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Body Content */}
+              <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-6 scrollbar-thin">
+                {/* Error & Success Messages */}
+                {adminError && (
+                  <div className="p-4 bg-red-500/5 border border-red-500/15 text-red-400 text-xs rounded-xl flex items-center gap-2.5 font-mono animate-[shake_0.5s_ease-in-out]">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{adminError}</span>
+                  </div>
+                )}
+                {adminSuccessMsg && (
+                  <div className="p-4 bg-green-500/5 border border-green-500/15 text-green-400 text-xs rounded-xl flex items-center gap-2.5 font-mono">
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    <span>{adminSuccessMsg}</span>
+                  </div>
+                )}
+
+                {/* LOGIN SCREEN MODE */}
+                {!isAdminLoggedIn ? (
+                  <div className="max-w-md mx-auto py-8">
+                    <form onSubmit={handleAdminLogin} className="space-y-5">
+                      <div className="space-y-1.5 text-center mb-6">
+                        <h4 className="text-sm font-semibold text-neutral-300">Access Key Challenge</h4>
+                        <p className="text-xs font-mono text-neutral-500">Provide system developer credentials</p>
+                      </div>
+
+                      <div className="space-y-4">
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-mono text-neutral-400 uppercase tracking-wider block">Username</label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="username (admin)"
+                            value={adminUsername}
+                            onChange={(e) => setAdminUsername(e.target.value)}
+                            className="w-full bg-neutral-900 border border-neutral-850 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none focus:ring-1 focus:ring-orange-500 focus:border-orange-500 transition-all font-mono"
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-mono text-neutral-400 uppercase tracking-wider block">Access Token Password</label>
+                          <input
+                            type="password"
+                            required
+                            placeholder="password (admin123)"
+                            value={adminPassword}
+                            onChange={(e) => setAdminPassword(e.target.value)}
+                            className="w-full bg-neutral-900 border border-neutral-850 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-605 focus:outline-none focus:ring-1 focus:ring-orange-500 focus:border-orange-500 transition-all font-mono"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="p-3 bg-neutral-900/50 border border-neutral-850 rounded-xl font-mono text-[9px] text-neutral-500 text-center uppercase tracking-wider">
+                        Authentication Tip: Use Username <span className="text-orange-500 font-bold">fizzorafiki</span> or <span className="text-orange-500 font-bold">admin</span> & Password <span className="text-orange-500 font-bold">admin123</span>
+                      </div>
+
+                      <button
+                        type="submit"
+                        className="w-full py-3 px-4 bg-orange-500 cursor-pointer text-white font-mono text-xs uppercase tracking-widest hover:bg-orange-600 rounded-xl transition-all shadow-[0_0_15px_rgba(249,115,22,0.15)] flex items-center justify-center gap-2 mt-2 font-bold"
+                      >
+                        <Lock className="w-4 h-4" />
+                        <span>Authenticate Systems</span>
+                      </button>
+                    </form>
+                  </div>
+                ) : (
+                  /* AUTHORIZED ADMIN CONSOLE */
+                  <div className="space-y-8">
+                    {/* Navigation tabs */}
+                    <div className="flex border-b border-neutral-905 pb-px gap-2 overflow-x-auto">
+                      {[
+                        { id: "project", label: "Add Project", icon: <LayoutGrid className="w-3.5 h-3.5" /> },
+                        { id: "skill", label: "Add Skill Specialty", icon: <Cpu className="w-3.5 h-3.5" /> },
+                        { id: "gallery", label: "Manage Gallery", icon: <Camera className="w-3.5 h-3.5" /> },
+                        { id: "records", label: "Nodes Datastore Config", icon: <Activity className="w-3.5 h-3.5" /> }
+                      ].map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => {
+                            setAdminActiveTab(item.id as any);
+                            setAdminError("");
+                            setAdminSuccessMsg("");
+                          }}
+                          className={`px-4 py-3 text-[11px] font-mono uppercase tracking-wider border-b-2 flex items-center gap-2 transition-all cursor-pointer shrink-0 ${
+                            adminActiveTab === item.id
+                              ? "border-orange-500 text-orange-500 font-bold bg-orange-500/5"
+                              : "border-transparent text-neutral-500 hover:text-neutral-300 hover:bg-neutral-950"
+                          }`}
+                        >
+                          {item.icon}
+                          <span>{item.label}</span>
+                        </button>
+                      ))}
+
+                      <button
+                        type="button"
+                        onClick={handleAdminLogout}
+                        className="ml-auto px-4 py-3 text-[11px] font-mono uppercase tracking-wider text-red-500 hover:text-red-400 hover:bg-red-500/5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
+                      >
+                        <Unlock className="w-3.5 h-3.5" />
+                        <span>Sign Out</span>
+                      </button>
+                    </div>
+
+                    {/* TAB CONTENT: ADD PROJECT */}
+                    {adminActiveTab === "project" && (
+                      <form onSubmit={handleAddProject} className="space-y-6">
+                        <div className="grid md:grid-cols-2 gap-6">
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-mono text-neutral-400 uppercase block font-semibold">Project Title *</label>
+                            <input
+                              type="text"
+                              required
+                              placeholder="E.g., Automated Crypto Ledger"
+                              value={newProjectTitle}
+                              onChange={(e) => setNewProjectTitle(e.target.value)}
+                              className="w-full bg-neutral-900/50 border border-neutral-850 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none focus:ring-1 focus:ring-orange-500 transition-all font-mono"
+                            />
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-mono text-neutral-400 uppercase block font-semibold">Category Segment *</label>
+                            <input
+                              type="text"
+                              required
+                              placeholder="E.g., Full-Stack System, Enterprise Gateway"
+                              value={newProjectCategory}
+                              onChange={(e) => setNewProjectCategory(e.target.value)}
+                              className="w-full bg-neutral-900/50 border border-neutral-850 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none focus:ring-1 focus:ring-orange-500 transition-all font-mono"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-mono text-neutral-400 uppercase block font-semibold">Summary Summary *</label>
+                          <textarea
+                            rows={3}
+                            required
+                            placeholder="Summarize key scope, infrastructure parameters, and systems goals..."
+                            value={newProjectDesc}
+                            onChange={(e) => setNewProjectDesc(e.target.value)}
+                            className="w-full bg-neutral-900/50 border border-neutral-850 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none focus:ring-1 focus:ring-orange-500 transition-all font-mono"
+                          />
+                        </div>
+
+                        <div className="grid md:grid-cols-2 gap-6">
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-mono text-neutral-400 uppercase block font-semibold">Key Metric (Optional)</label>
+                            <input
+                              type="text"
+                              placeholder="E.g., Audit latency dropped by 45%"
+                              value={newProjectMetrics}
+                              onChange={(e) => setNewProjectMetrics(e.target.value)}
+                              className="w-full bg-neutral-900/50 border border-neutral-850 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none focus:ring-1 focus:ring-orange-500 transition-all font-mono"
+                            />
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-mono text-neutral-400 uppercase block font-semibold">Technologies Stack Tags (Comma separated)</label>
+                            <input
+                              type="text"
+                              placeholder="React, TypeScript, SQLite, Express"
+                              value={newProjectTags}
+                              onChange={(e) => setNewProjectTags(e.target.value)}
+                              className="w-full bg-neutral-900/50 border border-neutral-850 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none focus:ring-1 focus:ring-orange-500 transition-all font-mono"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Image Inputs Section */}
+                        <div className="p-5 bg-neutral-900/20 border border-neutral-900 rounded-2xl space-y-4">
+                          <h4 className="text-xs uppercase font-mono tracking-wider text-neutral-300 font-semibold flex items-center gap-1.5">
+                            <Camera className="w-4 h-4 text-orange-500" />
+                            <span>Project Asset Illustration Image</span>
+                          </h4>
+                          <p className="text-[11px] text-neutral-500 font-mono">Provide a descriptive photo mockup. You can upload a design file or paste a web graphic URL.</p>
+
+                          <div className="grid md:grid-cols-2 gap-5 items-start">
+                            {/* File upload */}
+                            <div className="space-y-2">
+                              <label className="text-[9px] font-mono text-neutral-400 uppercase tracking-widest block font-bold">Select Local Image File</label>
+                              <div className="relative border border-dashed border-neutral-800 hover:border-orange-500/40 rounded-xl p-4 bg-neutral-950/40 transition-colors flex flex-col items-center justify-center text-center">
+                                <Upload className="w-5 h-5 text-neutral-650 mb-2" />
+                                <span className="text-[10px] text-neutral-400 font-mono block font-medium">JPEG, WebP, PNG files up to 2MB</span>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={handleImageFileChange}
+                                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Direct Web URL */}
+                            <div className="space-y-2">
+                              <label className="text-[9px] font-mono text-neutral-400 uppercase tracking-widest block font-bold">Or Enter Photo Web Link Address</label>
+                              <input
+                                type="url"
+                                placeholder="https://images.unsplash.com/photo-1542831371-29b0f74f9713?q=80&w=650"
+                                value={newProjectImage}
+                                onChange={(e) => setNewProjectImage(e.target.value)}
+                                className="w-full bg-neutral-950 border border-neutral-850 rounded-xl px-4 py-3.5 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none focus:ring-1 focus:ring-orange-500 transition-all font-mono"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Preview container */}
+                          {newProjectImage && (
+                            <div className="pt-2 border-t border-neutral-900 flex items-center gap-4">
+                              <div className="w-20 h-12 rounded border border-neutral-850 bg-neutral-950 overflow-hidden shrink-0">
+                                <img src={newProjectImage} alt="Thumbnail preview" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                              </div>
+                              <div>
+                                <span className="text-[10px] font-mono text-green-400 block font-semibold uppercase">Register Asset Loaded</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setNewProjectImage("")}
+                                  className="text-[10px] font-mono text-red-550 hover:text-red-400 underline mt-1"
+                                >
+                                  Purge loaded image
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Detailed Specs list */}
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-mono text-neutral-400 uppercase block font-semibold">Architectural Specifications (One detail statement per line)</label>
+                          <textarea
+                            rows={4}
+                            placeholder="Implemented typesafe, compiled database routes minimizing memory overhead.&#10;Integrated TLS-enabled endpoints keeping core systems isolated."
+                            value={newProjectDetails}
+                            onChange={(e) => setNewProjectDetails(e.target.value)}
+                            className="w-full bg-neutral-900/50 border border-neutral-850 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none focus:ring-1 focus:ring-orange-500 transition-all font-mono"
+                          />
+                        </div>
+
+                        <div className="grid md:grid-cols-2 gap-6">
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-mono text-neutral-400 uppercase block font-semibold">Demo Sandbox Link (Optional)</label>
+                            <input
+                              type="text"
+                              placeholder="#projects"
+                              value={newProjectDemoUrl}
+                              onChange={(e) => setNewProjectDemoUrl(e.target.value)}
+                              className="w-full bg-neutral-900/50 border border-neutral-850 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none focus:ring-1 focus:ring-orange-500 transition-all font-mono"
+                            />
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-mono text-neutral-400 uppercase block font-semibold">GitHub Source Repository (Optional)</label>
+                            <input
+                              type="url"
+                              placeholder="https://github.com"
+                              value={newProjectGithubUrl}
+                              onChange={(e) => setNewProjectGithubUrl(e.target.value)}
+                              className="w-full bg-neutral-900/50 border border-neutral-850 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none focus:ring-1 focus:ring-orange-500 transition-all font-mono"
+                            />
+                          </div>
+                        </div>
+
+                        <button
+                          type="submit"
+                          className="py-3.5 px-6 bg-orange-500 cursor-pointer text-white font-mono text-xs uppercase tracking-widest hover:bg-orange-600 rounded-xl transition-all shadow-[0_0_15px_rgba(249,115,22,0.15)] flex items-center justify-center gap-1.5 font-bold"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>Publish Project Integration</span>
+                        </button>
+                      </form>
+                    )}
+
+                    {/* TAB CONTENT: ADD SKILL */}
+                    {adminActiveTab === "skill" && (
+                      <form onSubmit={handleAddSkill} className="space-y-6">
+                        <div className="grid md:grid-cols-2 gap-6">
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-mono text-neutral-400 uppercase block font-semibold">Skill Catalog Category</label>
+                            <select
+                              value={selectedOrNewSkillCatId}
+                              onChange={(e) => setSelectedOrNewSkillCatId(e.target.value)}
+                              className="w-full bg-neutral-900 border border-neutral-850 rounded-xl px-4 py-3 text-xs text-neutral-200 font-mono focus:outline-none focus:ring-1 focus:ring-orange-500"
+                            >
+                              {skillCategories.map((cat) => (
+                                <option key={cat.id} value={cat.id}>
+                                  {cat.name}
+                                </option>
+                              ))}
+                              <option value="new">+ Declare New Custom Category</option>
+                            </select>
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-mono text-neutral-400 uppercase block font-semibold">Skill Specialty Name *</label>
+                            <input
+                              type="text"
+                              required
+                              placeholder="E.g., Go / Gin API, WebSockets"
+                              value={newSkillName}
+                              onChange={(e) => setNewSkillName(e.target.value)}
+                              className="w-full bg-neutral-900 border border-neutral-850 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none focus:ring-1 focus:ring-orange-500 transition-all font-mono"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Conditional New Category setup */}
+                        {selectedOrNewSkillCatId === "new" && (
+                          <div className="p-5 bg-neutral-900/30 border border-neutral-850 rounded-2xl grid md:grid-cols-2 gap-6 animate-fade-in">
+                            <div className="space-y-2">
+                              <label className="text-[10px] font-mono text-neutral-400 uppercase block font-semibold">New Category Directory Name *</label>
+                              <input
+                                type="text"
+                                required
+                                placeholder="E.g., Systems Operations, Automation"
+                                value={newSkillCatName}
+                                onChange={(e) => setNewSkillCatName(e.target.value)}
+                                className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none focus:ring-1 focus:ring-orange-500 transition-all font-mono"
+                              />
+                            </div>
+
+                            <div className="space-y-2">
+                              <label className="text-[10px] font-mono text-neutral-400 uppercase block font-semibold">Launcher Icon Representation</label>
+                              <select
+                                value={newSkillCatIcon}
+                                onChange={(e) => setNewSkillCatIcon(e.target.value)}
+                                className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-xs text-neutral-200 font-mono focus:outline-none focus:ring-1 focus:ring-orange-500"
+                              >
+                                <option value="server">Server (Network Systems)</option>
+                                <option value="monitor">Monitor (Frontend Platforms)</option>
+                                <option value="database">Database (Storage Engines)</option>
+                                <option value="layers">Layers (Systems Admin)</option>
+                                <option value="cpu">Cpu (Core Logic)</option>
+                                <option value="palette">Palette (Responsive Styling)</option>
+                              </select>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="space-y-4">
+                          <div className="flex justify-between items-center text-xs">
+                            <label className="text-[10px] font-mono text-neutral-400 uppercase tracking-wider block font-semibold">Proficiency Rating Level</label>
+                            <span className="text-xs font-mono text-orange-500 font-extrabold bg-orange-500/5 px-2.5 py-1 rounded border border-orange-500/10">
+                              {newSkillProficiency}% proficiency
+                            </span>
+                          </div>
+                          
+                          <input
+                            type="range"
+                            min="1"
+                            max="100"
+                            step="1"
+                            value={newSkillProficiency}
+                            onChange={(e) => setNewSkillProficiency(Number(e.target.value))}
+                            className="w-full h-1 bg-neutral-900 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                          />
+                          <div className="flex justify-between text-[9px] font-mono text-neutral-600">
+                            <span>0% (Junior Practitioner)</span>
+                            <span>50% (Competent Specialist)</span>
+                            <span>100% (Grandmaster Core Authority)</span>
+                          </div>
+                        </div>
+
+                        <button
+                          type="submit"
+                          className="py-3.5 px-6 bg-orange-500 cursor-pointer text-white font-mono text-xs uppercase tracking-widest hover:bg-orange-600 rounded-xl transition-all shadow-[0_0_15px_rgba(249,115,22,0.15)] flex items-center justify-center gap-1.5 font-bold"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>Sync Skill Specialty Points</span>
+                        </button>
+                      </form>
+                    )}
+
+                    {adminActiveTab === "gallery" && (
+                      <div className="bg-neutral-900/10 border border-neutral-905 p-5 rounded-2xl space-y-6 animate-fade-in text-left">
+                        <div className="border-b border-neutral-900/50 pb-4">
+                          <h4 className="text-neutral-100 font-mono text-xs uppercase tracking-widest font-bold">Publish Dynamic Photo Node</h4>
+                          <p className="text-[10px] font-mono text-neutral-500 mt-0.5">Select a photo from your desktop, assign descriptive labels, and instantly populate the landing page photostream.</p>
+                        </div>
+
+                        <form onSubmit={handleAddGalleryImage} className="space-y-6">
+                          <div className="grid md:grid-cols-2 gap-5">
+                            <div className="space-y-2">
+                              <label className="text-[9px] font-mono text-neutral-400 uppercase tracking-widest block font-bold">Photo Title / Label</label>
+                              <input
+                                type="text"
+                                value={newGalleryTitle}
+                                onChange={(e) => setNewGalleryTitle(e.target.value)}
+                                placeholder="Baptiste portrait shot"
+                                className="w-full bg-neutral-900 border border-neutral-850 focus:border-orange-500/50 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none transition-all font-mono"
+                              />
+                            </div>
+                            
+                            <div className="space-y-2">
+                              <label className="text-[9px] font-mono text-neutral-400 uppercase tracking-widest block font-bold">Event Context / Aspect Description</label>
+                              <input
+                                type="text"
+                                value={newGalleryDesc}
+                                onChange={(e) => setNewGalleryDesc(e.target.value)}
+                                placeholder="Taken during systems engineering audit."
+                                className="w-full bg-neutral-900 border border-neutral-850 focus:border-orange-500/50 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none transition-all font-mono"
+                              />
+                            </div>
+                          </div>
+
+                          {/* File upload drag/drop zone */}
+                          <div className="space-y-2">
+                            <span className="text-[9px] font-mono text-neutral-400 uppercase tracking-widest block font-bold">Select Photo Asset from Desktop</span>
+                            <div className="relative border-2 border-dashed border-neutral-850 hover:border-orange-500/40 rounded-2xl p-5 bg-neutral-900 transition-colors flex flex-col items-center justify-center text-center">
+                              {newGalleryImage ? (
+                                <div className="space-y-3">
+                                  <div className="w-40 h-28 mx-auto rounded-xl overflow-hidden border border-neutral-800 relative">
+                                    <img src={newGalleryImage} alt="Gallery item upload preview" className="w-full h-full object-cover" />
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => setNewGalleryImage("")}
+                                    className="px-2.5 py-1 bg-neutral-950 hover:bg-neutral-900 text-[10px] font-mono text-red-500 hover:text-red-400 border border-neutral-850 rounded-lg transition-colors cursor-pointer"
+                                  >
+                                    Remove Image
+                                  </button>
+                                </div>
+                              ) : (
+                                <>
+                                  <Upload className="w-6 h-6 text-neutral-600 mb-1.5" />
+                                  <span className="text-xs text-neutral-300 font-mono block font-medium">Browse desktop files</span>
+                                  <span className="text-[9px] text-neutral-550 font-mono block mt-0.5">JPEG/PNG up to 2MB</span>
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={handleGalleryImageChange}
+                                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                                  />
+                                </>
+                              )}
+                            </div>
+                          </div>
+
+                          <button
+                            type="submit"
+                            className="py-3 px-5 bg-orange-500 cursor-pointer text-white font-mono text-xs uppercase tracking-widest hover:bg-orange-600 rounded-xl transition-all shadow-lg flex items-center justify-center gap-1.5 font-bold"
+                          >
+                            <Plus className="w-4 h-4" />
+                            <span>Publish Dynamic Photo Node</span>
+                          </button>
+                        </form>
+                      </div>
+                    )}
+
+                    {/* TAB CONTENT: ACTIVE NODES CATALOG */}
+                    {adminActiveTab === "records" && (
+                      <div className="space-y-8">
+                        {/* Summary action */}
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-5 bg-orange-500/5 border border-orange-500/10 rounded-2xl gap-4">
+                          <div>
+                            <h4 className="text-xs font-bold text-neutral-200">Synchronized State Cache</h4>
+                            <p className="text-[10px] font-mono text-neutral-500 mt-0.5">Flush custom memory configurations to recover default static profiles.</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleResetData}
+                            className="px-4 py-2 bg-red-500/10 border border-red-500/15 text-red-500 hover:text-red-400 hover:bg-red-500/15 rounded-xl font-mono text-[10px] uppercase font-bold tracking-wider cursor-pointer transition-colors"
+                          >
+                            Reset System Data Catalog
+                          </button>
+                        </div>
+
+                        {/* Projects management list */}
+                        <div className="space-y-3">
+                          <h4 className="text-xs font-mono font-bold uppercase tracking-widest text-neutral-300 border-b border-neutral-900 pb-2">Currently Active Projects ({projects.length})</h4>
+                          
+                          <div className="space-y-2 max-h-60 overflow-y-auto scrollbar-thin pr-1">
+                            {projects.map((proj) => (
+                              <div key={proj.id} className="p-3 bg-neutral-900/35 border border-neutral-850 rounded-xl flex items-center justify-between gap-4 font-mono text-[11px]">
+                                <div className="flex items-center gap-3 overflow-hidden">
+                                  {proj.image ? (
+                                    <img src={proj.image} alt={proj.title} className="w-9 h-9 rounded object-cover shrink-0" referrerPolicy="referrer" />
+                                  ) : (
+                                    <div className="w-9 h-9 rounded bg-neutral-950 flex items-center justify-center text-[8px] text-neutral-600 uppercase shrink-0 font-bold border border-neutral-900">Seed</div>
+                                  )}
+                                  <div className="min-w-0">
+                                    <span className="font-semibold text-neutral-200 block truncate">{proj.title}</span>
+                                    <span className="text-[9px] text-neutral-500 block uppercase tracking-wide truncate">{proj.category}</span>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteProject(proj.id)}
+                                  className="p-1.5 rounded-lg border border-neutral-850 text-neutral-500 hover:text-red-500 hover:border-red-500/20 hover:bg-red-500/5 transition-all cursor-pointer shrink-0"
+                                  title="Delete project node"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Skills management list */}
+                        <div className="space-y-4">
+                          <h4 className="text-xs font-mono font-bold uppercase tracking-widest text-neutral-300 border-b border-neutral-900 pb-2">Active Technical Skill Matrix</h4>
+                          
+                          <div className="grid md:grid-cols-2 gap-4 max-h-[300px] overflow-y-auto scrollbar-thin pr-1">
+                            {skillCategories.map((cat) => (
+                              <div key={cat.id} className="p-4 bg-neutral-900/15 border border-neutral-900 rounded-xl space-y-2.5 text-[11px] font-mono">
+                                <span className="font-bold text-orange-500 text-xs tracking-wide uppercase border-b border-neutral-900/50 pb-1.5 block">{cat.name}</span>
+                                <div className="space-y-2 pt-1">
+                                  {cat.skills.map((sk) => (
+                                    <div key={sk.name} className="flex items-center justify-between gap-2.5 text-neutral-400 py-0.5">
+                                      <span className="truncate">{sk.name} ({sk.proficiency}%)</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteSkill(cat.id, sk.name)}
+                                        className="text-neutral-500 hover:text-red-400 text-[10px] cursor-pointer"
+                                      >
+                                        Delete
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </motion.div>
           </div>
         )}

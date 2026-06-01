@@ -9,6 +9,7 @@ export interface Project {
   details: string[];
   demoUrl?: string;
   githubUrl?: string;
+  image?: string;
 }
 
 export interface SkillCategory {
