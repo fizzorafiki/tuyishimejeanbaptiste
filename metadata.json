@@ -1,0 +1,6 @@
+{
+  "name": "Developer Portfolio",
+  "description": "Highly polished interactive developer portfolio for Tuyishime Jean Baptiste featuring dark premium styling, motion-powered smooth layouts, and a server-side Gemini AI assistant.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
