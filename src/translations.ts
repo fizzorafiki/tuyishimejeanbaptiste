@@ -37,6 +37,7 @@ export interface TranslationSet {
   navProjects: string;
   navFamily: string;
   navServices: string;
+  navGallery: string;
   navContact: string;
   
   heroStatus: string;
@@ -101,6 +102,7 @@ export const TRANSLATIONS: Record<"en" | "rw", TranslationSet> = {
     navProjects: "Projects",
     navFamily: "Family",
     navServices: "Services",
+    navGallery: "Gallery",
     navContact: "Contact",
     
     heroStatus: "Open to custom roles",
@@ -225,6 +227,7 @@ export const TRANSLATIONS: Record<"en" | "rw", TranslationSet> = {
     navProjects: "Imishinga",
     navFamily: "Umuryango",
     navServices: "Serivisi",
+    navGallery: "Amafoto",
     navContact: "Twandikire",
     
     heroStatus: "Niteguye imirimo mishya",

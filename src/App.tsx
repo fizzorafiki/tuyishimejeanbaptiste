@@ -48,7 +48,8 @@ import {
   Settings,
   Plus,
   Trash2,
-  Upload
+  Upload,
+  Edit3
 } from "lucide-react";
 import { PROJECTS, SKILL_CATEGORIES, SERVICES, TESTIMONIALS } from "./data";
 import { Project, ChatMessage, VisitorMessage, SkillCategory } from "./types";
@@ -123,6 +124,7 @@ export default function App() {
   const [newGalleryTitle, setNewGalleryTitle] = useState("");
   const [newGalleryDesc, setNewGalleryDesc] = useState("");
   const [newGalleryImage, setNewGalleryImage] = useState("");
+  const [editingGalleryId, setEditingGalleryId] = useState<string | null>(null);
 
   const getProjectImage = (project: Project) => {
     if (project.image) return project.image;
@@ -461,29 +463,77 @@ export default function App() {
       return;
     }
 
-    const newPhoto = {
-      id: `g-custom-${Date.now()}`,
-      url: newGalleryImage,
-      title: newGalleryTitle.trim(),
-      desc: newGalleryDesc.trim()
-    };
+    if (editingGalleryId) {
+      const originalImage = galleryImages.find((img) => img.id === editingGalleryId);
+      const updated = galleryImages.map((img) =>
+        img.id === editingGalleryId
+          ? { ...img, title: newGalleryTitle.trim(), desc: newGalleryDesc.trim(), url: newGalleryImage }
+          : img
+      );
+      setGalleryImages(updated);
+      localStorage.setItem("tjb_portfolio_gallery", JSON.stringify(updated));
+      
+      // Keep active image state synchronized if the modified image was the currently selected preview
+      if (originalImage && activeGalleryImage === originalImage.url) {
+        setActiveGalleryImage(newGalleryImage);
+      }
 
-    const updated = [...galleryImages, newPhoto];
-    setGalleryImages(updated);
-    localStorage.setItem("tjb_portfolio_gallery", JSON.stringify(updated));
+      setEditingGalleryId(null);
+      setAdminSuccessMsg("Gallery image updated successfully!");
+    } else {
+      const newPhoto = {
+        id: `g-custom-${Date.now()}`,
+        url: newGalleryImage,
+        title: newGalleryTitle.trim(),
+        desc: newGalleryDesc.trim()
+      };
+
+      const updated = [...galleryImages, newPhoto];
+      setGalleryImages(updated);
+      localStorage.setItem("tjb_portfolio_gallery", JSON.stringify(updated));
+      setAdminSuccessMsg("Gallery image published to the photostream successfully!");
+    }
 
     // Clear form
     setNewGalleryTitle("");
     setNewGalleryDesc("");
     setNewGalleryImage("");
-    
-    setAdminSuccessMsg("Gallery image published to the photostream successfully!");
+  };
+
+  const handleEditGalleryInit = (id: string) => {
+    const target = galleryImages.find(img => img.id === id);
+    if (target) {
+      setEditingGalleryId(id);
+      setNewGalleryTitle(target.title);
+      setNewGalleryDesc(target.desc);
+      setNewGalleryImage(target.url);
+      setAdminSuccessMsg(`Ready to edit: "${target.title}"`);
+    }
+  };
+
+  const handleCancelEditGallery = () => {
+    setEditingGalleryId(null);
+    setNewGalleryTitle("");
+    setNewGalleryDesc("");
+    setNewGalleryImage("");
+    setAdminSuccessMsg("Editing canceled.");
   };
 
   const handleDeleteGalleryImage = (id: string) => {
+    const target = galleryImages.find(item => item.id === id);
     const updated = galleryImages.filter(item => item.id !== id);
     setGalleryImages(updated);
     localStorage.setItem("tjb_portfolio_gallery", JSON.stringify(updated));
+    if (editingGalleryId === id) {
+      setEditingGalleryId(null);
+      setNewGalleryTitle("");
+      setNewGalleryDesc("");
+      setNewGalleryImage("");
+    }
+    // Synchronize selected preview if the active gallery image is being deleted
+    if (target && activeGalleryImage === target.url) {
+      setActiveGalleryImage(null);
+    }
     setAdminSuccessMsg("Gallery image trace purged from local registry.");
   };
 
@@ -566,7 +616,7 @@ export default function App() {
       setIsNavbarScrolled(window.scrollY > 80);
       
       // Update active hash highlighted tab
-      const sections = ["about", "expertise", "projects", "family", "services", "contact"];
+      const sections = ["about", "expertise", "projects", "family", "services", "gallery", "contact"];
       for (const section of sections) {
         const el = document.getElementById(section);
         if (el) {
@@ -793,6 +843,7 @@ export default function App() {
       case "projects": return t.navProjects;
       case "family": return t.navFamily;
       case "services": return t.navServices;
+      case "gallery": return t.navGallery;
       case "contact": return t.navContact;
       default: return sec;
     }
@@ -910,10 +961,6 @@ export default function App() {
                         className="w-full bg-neutral-950 border border-neutral-850 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-700 focus:outline-none focus:ring-1 focus:ring-orange-500 focus:border-orange-500 transition-all font-mono"
                       />
                     </div>
-                  </div>
-
-                  <div className="p-3.5 bg-neutral-950/80 border border-neutral-900 rounded-xl font-mono text-[9.5px] text-neutral-500 text-center uppercase tracking-wider leading-relaxed">
-                    Authentication Tip: Login with Username <span className="text-orange-500 font-bold">fizzorafiki</span> or <span className="text-orange-500 font-bold">admin</span> & Password <span className="text-orange-500 font-bold">admin123</span>
                   </div>
 
                   <button
@@ -1294,8 +1341,14 @@ export default function App() {
                   {adminActiveTab === "gallery" && (
                     <div className="bg-neutral-900/10 border border-neutral-900/40 p-6 rounded-2xl space-y-6 animate-fade-in text-left">
                       <div className="border-b border-neutral-900/50 pb-4">
-                        <h3 className="text-neutral-100 font-mono text-xs uppercase tracking-widest font-bold">Publish Dynamic Photo Node</h3>
-                        <p className="text-[11px] font-mono text-neutral-500 mt-1">Select an image from your desktop (limit 2MB), assign metadata labels, and broadcast it directly to the landing page photostream.</p>
+                        <h3 className="text-neutral-100 font-mono text-xs uppercase tracking-widest font-bold">
+                          {editingGalleryId ? "Revise Existing Photo Node" : "Publish Dynamic Photo Node"}
+                        </h3>
+                        <p className="text-[11px] font-mono text-neutral-500 mt-1">
+                          {editingGalleryId 
+                            ? "Configure the new title, context description, and image data for this asset." 
+                            : "Select an image from your desktop (limit 2MB), assign metadata labels, and broadcast it directly to the landing page photostream."}
+                        </p>
                       </div>
 
                       <form onSubmit={handleAddGalleryImage} className="space-y-6">
@@ -1356,14 +1409,92 @@ export default function App() {
                           </div>
                         </div>
 
-                        <button
-                          type="submit"
-                          className="py-3.5 px-6 bg-orange-500 cursor-pointer text-white font-mono text-xs uppercase tracking-widest hover:bg-orange-600 rounded-xl transition-all shadow-lg shadow-orange-500/15 flex items-center justify-center gap-1.5 font-bold"
-                        >
-                          <Plus className="w-4.5 h-4.5" />
-                          <span>Publish Dynamic Photo Node</span>
-                        </button>
+                        <div className="flex flex-wrap gap-4">
+                          <button
+                            type="submit"
+                            className="py-3.5 px-6 bg-orange-500 cursor-pointer text-white font-mono text-xs uppercase tracking-widest hover:bg-orange-600 rounded-xl transition-all shadow-lg shadow-orange-500/15 flex items-center justify-center gap-1.5 font-bold"
+                          >
+                            {editingGalleryId ? <Check className="w-4.5 h-4.5 text-neutral-950" /> : <Plus className="w-4.5 h-4.5" />}
+                            <span>{editingGalleryId ? "Save Dynamic Changes" : "Publish Dynamic Photo Node"}</span>
+                          </button>
+                          {editingGalleryId && (
+                            <button
+                              type="button"
+                              onClick={handleCancelEditGallery}
+                              className="py-3.5 px-6 bg-neutral-900 hover:bg-neutral-850 border border-neutral-800 cursor-pointer text-neutral-400 hover:text-neutral-250 font-mono text-xs uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-1.5 font-bold"
+                            >
+                              <X className="w-4 h-4 text-red-500" />
+                              <span>Cancel Edit</span>
+                            </button>
+                          )}
+                        </div>
                       </form>
+
+                      {/* Active Photostream Panels List (Direct Management) */}
+                      <div className="space-y-4 pt-6 border-t border-neutral-900/50">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-xs font-mono font-bold uppercase tracking-widest text-neutral-300 flex items-center gap-2">
+                            <Camera className="w-4 h-4 text-orange-500" />
+                            <span>Currently Active Photostream Panels ({galleryImages.length})</span>
+                          </h4>
+                          <span className="text-[10px] font-mono text-neutral-500 font-bold uppercase tracking-wider">Add, Update, or Delete Entries</span>
+                        </div>
+
+                        {galleryImages.length === 0 ? (
+                          <p className="text-[11px] font-mono text-neutral-550 italic">No gallery images registered.</p>
+                        ) : (
+                          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {galleryImages.map((p) => (
+                              <div
+                                key={p.id}
+                                className={`p-3 bg-neutral-950/80 border rounded-2xl flex flex-col justify-between gap-3 group transition-all duration-300 ${
+                                  editingGalleryId === p.id ? "border-orange-500/50 shadow-lg shadow-orange-500/5" : "border-neutral-900 hover:border-neutral-800"
+                                }`}
+                              >
+                                <div className="space-y-2">
+                                  <div className="aspect-[4/3] rounded-xl overflow-hidden bg-neutral-905 border border-neutral-900 relative">
+                                    <img
+                                      src={p.url}
+                                      alt={p.title}
+                                      className="w-full h-full object-cover group-hover:scale-103 transition-transform duration-300"
+                                      referrerPolicy="no-referrer"
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <span className="font-semibold text-neutral-200 block truncate text-xs">{p.title}</span>
+                                    <p className="text-[10px] text-neutral-500 line-clamp-2 leading-relaxed font-mono">{p.desc}</p>
+                                  </div>
+                                </div>
+                                
+                                <div className="flex gap-2 pt-1 border-t border-neutral-900/40">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleEditGalleryInit(p.id)}
+                                    className="flex-1 py-1.5 bg-neutral-900 hover:bg-orange-500/10 border border-neutral-850 hover:border-orange-500/20 text-neutral-400 hover:text-orange-400 font-mono text-[9px] uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer font-bold"
+                                    title="Edit gallery node metadata & URL"
+                                  >
+                                    <Edit3 className="w-3 h-3 text-orange-500" />
+                                    <span>Update</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (window.confirm("Purge this photostream frame? This trace will be permanently deleted from dynamic stores.")) {
+                                        handleDeleteGalleryImage(p.id);
+                                      }
+                                    }}
+                                    className="flex-1 py-1.5 bg-neutral-900 hover:bg-red-500/10 border border-neutral-850 hover:border-red-500/20 text-neutral-450 hover:text-red-400 font-mono text-[9px] uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer font-bold"
+                                    title="Permanently Delete Image"
+                                  >
+                                    <Trash2 className="w-3 h-3 text-red-500" />
+                                    <span>Delete</span>
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
 
@@ -1495,18 +1626,31 @@ export default function App() {
                                 </div>
                               </div>
                               
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (window.confirm("Purge this photostream frame? This trace will be permanently deleted from dynamic stores.")) {
-                                    handleDeleteGalleryImage(p.id);
-                                  }
-                                }}
-                                className="w-full py-1.5 bg-neutral-900 hover:bg-red-500/10 border border-neutral-850 hover:border-red-500/20 text-neutral-450 hover:text-red-400 font-mono text-[9px] uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer font-bold mt-2"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                                <span>Purge Asset Node</span>
-                              </button>
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    handleEditGalleryInit(p.id);
+                                    setAdminActiveTab("gallery");
+                                  }}
+                                  className="flex-1 py-1.5 bg-neutral-900 hover:bg-orange-500/10 border border-neutral-850 hover:border-orange-500/20 text-neutral-450 hover:text-orange-400 font-mono text-[9px] uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1.2 cursor-pointer font-bold mt-2"
+                                >
+                                  <Edit3 className="w-3 h-3" />
+                                  <span>Edit</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (window.confirm("Purge this photostream frame? This trace will be permanently deleted from dynamic stores.")) {
+                                      handleDeleteGalleryImage(p.id);
+                                    }
+                                  }}
+                                  className="flex-1 py-1.5 bg-neutral-900 hover:bg-red-500/10 border border-neutral-850 hover:border-red-500/20 text-neutral-450 hover:text-red-400 font-mono text-[9px] uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1.2 cursor-pointer font-bold mt-2"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                  <span>Purge</span>
+                                </button>
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -1566,7 +1710,7 @@ export default function App() {
 
           {/* Core Desktop Navbar Menu Links */}
           <div className="hidden md:flex items-center gap-6">
-            {["about", "expertise", "projects", "family", "services", "contact"].map((section) => (
+            {["about", "expertise", "projects", "family", "services", "gallery", "contact"].map((section) => (
               <a
                 key={section}
                 href={`#${section}`}
@@ -1673,7 +1817,7 @@ export default function App() {
             className="fixed inset-0 top-[64px] z-30 bg-neutral-950/95 backdrop-blur-2xl border-b border-neutral-900 block md:hidden"
           >
             <div className="flex flex-col gap-5 p-8 max-h-screen overflow-y-auto">
-              {["about", "expertise", "projects", "family", "services", "contact"].map((section) => (
+              {["about", "expertise", "projects", "family", "services", "gallery", "contact"].map((section) => (
                 <a
                   key={section}
                   href={`#${section}`}
@@ -2634,6 +2778,87 @@ export default function App() {
         </div>
       </motion.section>
 
+      {/* Interactive Gallery Section */}
+      <motion.section
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true, margin: "-120px" }}
+        variants={scrollRevealVariants}
+        id="gallery"
+        className="py-24 border-t border-neutral-900/30 bg-neutral-950/20 relative snap-start"
+      >
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="flex flex-col md:flex-row items-start md:items-end justify-between mb-16 gap-4">
+            <div className="space-y-3">
+              <span className="text-xs font-mono uppercase tracking-[0.25em] text-orange-500 font-semibold px-2.5 py-1 bg-orange-500/5 border border-orange-500/15 rounded-full inline-block">
+                {language === "rw" ? "AMAFOTO DEYITALI" : "SELF-NODE TELEMETRY"}
+              </span>
+              <h2 className="text-3xl md:text-5xl font-bold tracking-tight text-neutral-100">
+                {language === "rw" ? "Agasanduku k'Amafoto" : "Photostream & Gallery"}
+              </h2>
+            </div>
+            <p className="text-neutral-500 font-light text-sm max-w-sm">
+              {language === "rw" 
+                ? "Amafoto y'ingirakamaro mu mishinga, amahugurwa ndetse no mu bikorwa bya buri munsi bifotoreye kuri terefoni cyane cyane i Kigali."
+                : "Real-time visual telemetry, presentation stages, production logs, and community interactions in high-fidelity snaps."}
+            </p>
+          </div>
+
+          {galleryImages.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+              {galleryImages.map((image, idx) => (
+                <motion.div
+                  key={image.id}
+                  whileHover={{ y: -6, scale: 1.01 }}
+                  transition={{ duration: 0.3, ease: "easeOut" }}
+                  onClick={() => {
+                    setActiveGalleryImage(image.url);
+                    setIsGalleryOpen(true);
+                  }}
+                  className="group relative rounded-3xl overflow-hidden bg-neutral-900/15 border border-neutral-900/60 p-4 hover:border-orange-500/30 hover:bg-neutral-900/25 transition-all cursor-pointer flex flex-col justify-between shadow-xl"
+                >
+                  <div className="space-y-4">
+                    {/* Image Container with zoom aspect ratio */}
+                    <div className="aspect-[4/3] rounded-2xl overflow-hidden bg-neutral-950 border border-neutral-900/80 relative flex items-center justify-center">
+                      <img
+                        src={image.url}
+                        alt={image.title}
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        referrerPolicy="no-referrer"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-neutral-950/80 via-neutral-950/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-between p-4">
+                        <span className="text-[10px] font-mono uppercase tracking-wider text-neutral-100">{language === "rw" ? "Fungura Ifoto" : "Expand Snap"}</span>
+                        <Camera className="w-4 h-4 text-orange-500" />
+                      </div>
+                    </div>
+                    {/* Metadata text aspect */}
+                    <div className="space-y-2 px-1">
+                      <h3 className="text-sm font-bold text-neutral-100 tracking-tight group-hover:text-orange-500 transition-colors">
+                        {image.title}
+                      </h3>
+                      <p className="text-xs text-neutral-450 leading-relaxed font-mono font-light line-clamp-2">
+                        {image.desc}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="pt-4 border-t border-neutral-900/40 mt-4 flex items-center justify-between px-1 font-mono text-[10px] text-neutral-500">
+                    <span className="uppercase tracking-wider">Node Frame #{idx + 1}</span>
+                    <span className="text-orange-500/80 uppercase font-semibold">View &bull; zoom in</span>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          ) : (
+            <div className="border border-dashed border-neutral-900/80 rounded-3xl p-12 text-center bg-neutral-900/5">
+              <Camera className="w-12 h-12 text-neutral-700 mx-auto mb-4 animate-pulse" />
+              <p className="text-sm font-mono text-neutral-400 font-medium">{language === "rw" ? "Nta mafoto arashyirwamo." : "No gallery images exist in storage."}</p>
+              <p className="text-xs font-mono text-neutral-550 mt-1">{language === "rw" ? "Ubuyobozi bukeneye kwinjira kugira ngo bushyiremo amafoto m'ububiko." : "Admin privileges required to upload assets from desktop files."}</p>
+            </div>
+          )}
+        </div>
+      </motion.section>
+
       {/* Contact Form and Client Ledger Section */}
       <motion.section
         initial="hidden"
@@ -3119,7 +3344,7 @@ export default function App() {
                           <input
                             type="text"
                             required
-                            placeholder="username (admin)"
+                            placeholder="Enter username"
                             value={adminUsername}
                             onChange={(e) => setAdminUsername(e.target.value)}
                             className="w-full bg-neutral-900 border border-neutral-850 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none focus:ring-1 focus:ring-orange-500 focus:border-orange-500 transition-all font-mono"
@@ -3131,16 +3356,12 @@ export default function App() {
                           <input
                             type="password"
                             required
-                            placeholder="password (admin123)"
+                            placeholder="Enter password"
                             value={adminPassword}
                             onChange={(e) => setAdminPassword(e.target.value)}
                             className="w-full bg-neutral-900 border border-neutral-850 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-605 focus:outline-none focus:ring-1 focus:ring-orange-500 focus:border-orange-500 transition-all font-mono"
                           />
                         </div>
-                      </div>
-
-                      <div className="p-3 bg-neutral-900/50 border border-neutral-850 rounded-xl font-mono text-[9px] text-neutral-500 text-center uppercase tracking-wider">
-                        Authentication Tip: Use Username <span className="text-orange-500 font-bold">fizzorafiki</span> or <span className="text-orange-500 font-bold">admin</span> & Password <span className="text-orange-500 font-bold">admin123</span>
                       </div>
 
                       <button
@@ -3463,8 +3684,14 @@ export default function App() {
                     {adminActiveTab === "gallery" && (
                       <div className="bg-neutral-900/10 border border-neutral-905 p-5 rounded-2xl space-y-6 animate-fade-in text-left">
                         <div className="border-b border-neutral-900/50 pb-4">
-                          <h4 className="text-neutral-100 font-mono text-xs uppercase tracking-widest font-bold">Publish Dynamic Photo Node</h4>
-                          <p className="text-[10px] font-mono text-neutral-500 mt-0.5">Select a photo from your desktop, assign descriptive labels, and instantly populate the landing page photostream.</p>
+                          <h4 className="text-neutral-100 font-mono text-xs uppercase tracking-widest font-bold">
+                            {editingGalleryId ? "Revise Existing Photo Node" : "Publish Dynamic Photo Node"}
+                          </h4>
+                          <p className="text-[10px] font-mono text-neutral-500 mt-0.5">
+                            {editingGalleryId
+                              ? "Configure the new title, context description, and image data for this asset."
+                              : "Select a photo from your desktop, assign descriptive labels, and instantly populate the landing page photostream."}
+                          </p>
                         </div>
 
                         <form onSubmit={handleAddGalleryImage} className="space-y-6">
@@ -3525,14 +3752,92 @@ export default function App() {
                             </div>
                           </div>
 
-                          <button
-                            type="submit"
-                            className="py-3 px-5 bg-orange-500 cursor-pointer text-white font-mono text-xs uppercase tracking-widest hover:bg-orange-600 rounded-xl transition-all shadow-lg flex items-center justify-center gap-1.5 font-bold"
-                          >
-                            <Plus className="w-4 h-4" />
-                            <span>Publish Dynamic Photo Node</span>
-                          </button>
+                          <div className="flex flex-wrap gap-4">
+                            <button
+                              type="submit"
+                              className="py-3 px-5 bg-orange-500 cursor-pointer text-white font-mono text-xs uppercase tracking-widest hover:bg-orange-600 rounded-xl transition-all shadow-lg flex items-center justify-center gap-1.5 font-bold"
+                            >
+                              {editingGalleryId ? <Check className="w-4 h-4 cursor-pointer" /> : <Plus className="w-4 h-4" />}
+                              <span>{editingGalleryId ? "Save Changes" : "Publish Dynamic Photo Node"}</span>
+                            </button>
+                            {editingGalleryId && (
+                              <button
+                                type="button"
+                                onClick={handleCancelEditGallery}
+                                className="py-3 px-5 bg-neutral-900 hover:bg-neutral-850 border border-neutral-800 cursor-pointer text-neutral-400 hover:text-neutral-250 font-mono text-xs uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-1.5 font-bold"
+                              >
+                                <X className="w-4 h-4 text-red-500" />
+                                <span>Cancel Edit</span>
+                              </button>
+                            )}
+                          </div>
                         </form>
+
+                        {/* Active Photostream Panels List (Direct Management) */}
+                        <div className="space-y-4 pt-6 border-t border-neutral-905">
+                          <div className="flex items-center justify-between">
+                            <h4 className="text-xs font-mono font-bold uppercase tracking-widest text-neutral-300 flex items-center gap-2">
+                              <Camera className="w-4 h-4 text-orange-500" />
+                              <span>Currently Active Photostream Panels ({galleryImages.length})</span>
+                            </h4>
+                            <span className="text-[10px] font-mono text-neutral-500 font-bold uppercase tracking-wider">Add, Update, or Delete</span>
+                          </div>
+
+                          {galleryImages.length === 0 ? (
+                            <p className="text-[11px] font-mono text-neutral-550 italic">No gallery images registered.</p>
+                          ) : (
+                            <div className="grid sm:grid-cols-2 gap-4 max-h-[350px] overflow-y-auto scrollbar-thin pr-1">
+                              {galleryImages.map((p) => (
+                                <div
+                                  key={p.id}
+                                  className={`p-3 bg-neutral-950/80 border rounded-2xl flex flex-col justify-between gap-3 group transition-all duration-300 ${
+                                    editingGalleryId === p.id ? "border-orange-500/50 shadow-lg shadow-orange-500/5" : "border-neutral-900 hover:border-neutral-800"
+                                  }`}
+                                >
+                                  <div className="space-y-2">
+                                    <div className="aspect-[4/3] rounded-xl overflow-hidden bg-neutral-900 border border-neutral-850 relative">
+                                      <img
+                                        src={p.url}
+                                        alt={p.title}
+                                        className="w-full h-full object-cover group-hover:scale-103 transition-transform duration-300"
+                                        referrerPolicy="no-referrer"
+                                      />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <span className="font-semibold text-neutral-200 block truncate text-xs">{p.title}</span>
+                                      <p className="text-[10px] text-neutral-500 line-clamp-2 leading-relaxed font-mono">{p.desc}</p>
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="flex gap-2 pt-1 border-t border-neutral-900/40">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleEditGalleryInit(p.id)}
+                                      className="flex-1 py-1.5 bg-neutral-900 hover:bg-orange-500/10 border border-neutral-850 hover:border-orange-500/20 text-neutral-300 hover:text-orange-400 font-mono text-[9px] uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1.2 cursor-pointer font-bold"
+                                      title="Edit gallery node metadata & URL"
+                                    >
+                                      <Edit3 className="w-3 h-3 text-orange-500" />
+                                      <span>Update</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (window.confirm("Purge this photostream frame? This trace will be permanently deleted from dynamic stores.")) {
+                                          handleDeleteGalleryImage(p.id);
+                                        }
+                                      }}
+                                      className="flex-1 py-1.5 bg-neutral-900 hover:bg-red-500/10 border border-neutral-850 hover:border-red-500/20 text-neutral-450 hover:text-red-400 font-mono text-[9px] uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1.2 cursor-pointer font-bold"
+                                      title="Permanently remove image asset"
+                                    >
+                                      <Trash2 className="w-3 h-3 text-red-500" />
+                                      <span>Delete</span>
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
 
@@ -3611,6 +3916,65 @@ export default function App() {
                             ))}
                           </div>
                         </div>
+
+                        {/* Gallery Assets Registry Management */}
+                        <div className="space-y-4 pt-2">
+                          <h4 className="text-xs font-mono font-bold uppercase tracking-widest text-neutral-300 border-b border-neutral-900 pb-2 flex items-center gap-2">
+                            <Camera className="w-4 h-4 text-orange-500" />
+                            <span>Currently Active Photostream Panels ({galleryImages.length})</span>
+                          </h4>
+
+                          <div className="grid sm:grid-cols-2 gap-4 max-h-[350px] overflow-y-auto scrollbar-thin pr-1">
+                            {galleryImages.map((p) => (
+                              <div
+                                key={p.id}
+                                className="p-3 bg-neutral-900/35 border border-neutral-850 hover:border-orange-500/20 rounded-2xl flex flex-col justify-between gap-3 group transition-all"
+                              >
+                                <div className="space-y-2">
+                                  <div className="aspect-[4/3] rounded-xl overflow-hidden bg-neutral-950 border border-neutral-800 relative">
+                                    <img
+                                      src={p.url}
+                                      alt={p.title}
+                                      className="w-full h-full object-cover group-hover:scale-103 transition-transform duration-300"
+                                      referrerPolicy="no-referrer"
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <span className="font-semibold text-neutral-200 block truncate text-xs">{p.title}</span>
+                                    <p className="text-[10px] text-neutral-500 line-clamp-2 leading-relaxed font-mono">{p.desc}</p>
+                                  </div>
+                                </div>
+                                
+                                <div className="flex gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      handleEditGalleryInit(p.id);
+                                      setAdminActiveTab("gallery");
+                                    }}
+                                    className="flex-1 py-1.5 bg-neutral-900 hover:bg-orange-500/10 border border-neutral-800 hover:border-orange-500/20 text-neutral-450 hover:text-orange-400 font-mono text-[9px] uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1.2 cursor-pointer font-bold mt-2"
+                                  >
+                                    <Edit3 className="w-3 h-3" />
+                                    <span>Edit</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (window.confirm("Purge this photostream frame? This trace will be permanently deleted from dynamic stores.")) {
+                                        handleDeleteGalleryImage(p.id);
+                                      }
+                                    }}
+                                    className="flex-1 py-1.5 bg-neutral-900 hover:bg-red-500/10 border border-neutral-800 hover:border-red-500/20 text-neutral-450 hover:text-red-400 font-mono text-[9px] uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1.2 cursor-pointer font-bold mt-2"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                    <span>Purge</span>
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
                       </div>
                     )}
                   </div>
