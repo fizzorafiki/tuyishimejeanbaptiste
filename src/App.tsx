@@ -61,6 +61,7 @@ import { TRANSLATIONS, BAPTISTE_GALLERY } from "./translations";
 import { WebGLShader } from "./components/ui/web-gl-shader";
 import { LiquidButton } from "./components/ui/liquid-glass-button";
 import { ImageCropperModal } from "./components/ImageCropperModal";
+import portfolioLogo from "./assets/images/portfolio_logo_1781943953205.jpg";
 
 const scrollRevealVariants = {
   hidden: { opacity: 0, y: 35 },
@@ -1338,12 +1339,24 @@ export default function App() {
                 e.preventDefault();
                 navigateTo("/");
               }}
-              className="text-neutral-100 font-mono text-sm tracking-widest font-semibold flex items-center gap-1.5 focus:outline-none focus:ring-1 focus:ring-orange-500"
+              className="text-neutral-100 font-mono text-sm tracking-widest font-semibold flex items-center gap-2 focus:outline-none focus:ring-1 focus:ring-orange-500 group"
             >
-              TJB<span className="text-orange-500">&lt;/&gt;</span>
-              <span className="text-[10px] text-neutral-500 font-normal uppercase tracking-wider bg-neutral-900 border border-neutral-800 px-2 py-0.5 rounded-full ml-1.5">
-                Admin Center
-              </span>
+              <div className="relative w-8 h-8 rounded-xl overflow-hidden border border-orange-500/20 group-hover:border-orange-500/50 transition-colors shadow-[0_0_12px_rgba(249,115,22,0.1)] flex items-center justify-center shrink-0">
+                <img
+                  src={portfolioLogo}
+                  alt="TJB Logo"
+                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                  referrerPolicy="no-referrer"
+                />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="group-hover:text-orange-400 transition-colors">
+                  TJB<span className="text-orange-500 font-extrabold">&lt;/&gt;</span>
+                </span>
+                <span className="text-[10px] text-neutral-500 font-normal uppercase tracking-wider bg-neutral-900 border border-neutral-800 px-2 py-0.5 rounded-full">
+                  Admin Center
+                </span>
+              </div>
             </a>
 
             <div className="flex items-center gap-4 text-neutral-500 text-[11px] font-mono">
@@ -2633,9 +2646,19 @@ export default function App() {
                 navigateTo("/");
               }
             }}
-            className="text-neutral-100 font-mono text-sm tracking-widest font-semibold flex items-center gap-1.5 focus:outline-none focus:ring-1 focus:ring-orange-500"
+            className="text-neutral-100 font-mono text-sm tracking-widest font-semibold flex items-center gap-2 focus:outline-none focus:ring-1 focus:ring-orange-500 group"
           >
-            TJB<span className="text-orange-500">&lt;/&gt;</span>
+            <div className="relative w-8 h-8 rounded-xl overflow-hidden border border-orange-500/20 group-hover:border-orange-500/50 transition-colors shadow-[0_0_12px_rgba(249,115,22,0.1)] flex items-center justify-center shrink-0">
+              <img
+                src={portfolioLogo}
+                alt="TJB Logo"
+                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+            <span className="group-hover:text-orange-400 transition-colors">
+              TJB<span className="text-orange-500 font-extrabold">&lt;/&gt;</span>
+            </span>
           </a>
 
           {/* Core Desktop Navbar Menu Links */}
