@@ -8,9 +8,27 @@
 
 /* Custom minimal scrollbar utility variables */
 html {
+  font-size: 16px;
   scroll-snap-type: y proximity;
   scroll-behavior: smooth;
   scroll-padding-top: 80px; /* Offset to prevent navbar overlapping section titles */
+}
+
+@media (min-width: 640px) {
+  html {
+    font-size: 17px;
+  }
+}
+
+@media (min-width: 1024px) {
+  html {
+    font-size: 18.5px; /* Beautifully scale up base readable size on desktop */
+  }
+}
+
+body {
+  font-size: 1.05rem; /* Slight additional legibility boost for content */
+  line-height: 1.6;
 }
 
 ::-webkit-scrollbar {

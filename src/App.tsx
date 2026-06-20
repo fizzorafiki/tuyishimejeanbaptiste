@@ -157,7 +157,28 @@ export default function App() {
   const [adminPassword, setAdminPassword] = useState("");
   const [adminError, setAdminError] = useState("");
   const [adminSuccessMsg, setAdminSuccessMsg] = useState("");
-  const [adminActiveTab, setAdminActiveTab] = useState<"project" | "skill" | "gallery" | "records">("project");
+  const [adminActiveTab, setAdminActiveTab] = useState<"project" | "skill" | "gallery" | "records" | "chats">("project");
+
+  // Admin Live Chat management
+  const [adminChatSessions, setAdminChatSessions] = useState<any[]>([]);
+  const [activeAdminSessionId, setActiveAdminSessionId] = useState<string | null>(null);
+  const [adminReplyText, setAdminReplyText] = useState("");
+  const [aiSuggestion, setAiSuggestion] = useState("");
+  const [isSuggestionLoading, setIsSuggestionLoading] = useState(false);
+
+  // Visitor Client-side Real-time Chat details
+  const [chatSessionId, setChatSessionId] = useState<string>(() => {
+    let saved = localStorage.getItem("tjb_portfolio_session_id");
+    if (!saved) {
+      saved = "sess_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9);
+      localStorage.setItem("tjb_portfolio_session_id", saved);
+    }
+    return saved;
+  });
+  const [visitorName, setVisitorName] = useState<string>(() => {
+    return localStorage.getItem("tjb_portfolio_visitor_name") || "";
+  });
+  const [sessionAiEnabled, setSessionAiEnabled] = useState<boolean>(true);
 
   // Custom router state tracking paths
   const [currentPath, setCurrentPath] = useState<string>(() => window.location.pathname);
@@ -707,62 +728,132 @@ export default function App() {
     setTerminalInput("");
   };
 
-  // Chat message sending pipeline with Server-side Gemini API
+  // Visitor Poll effect (polls when user chat window is open)
+  useEffect(() => {
+    let intervalId: any = null;
+
+    const syncVisitorSession = async () => {
+      try {
+        const res = await fetch(`/api/chat/session/${chatSessionId}`);
+        if (res.ok) {
+          const data = await res.json();
+          // Transform content/timestamp to front-end types
+          const parsedMsgs: ChatMessage[] = data.messages.map((m: any) => ({
+            id: m.id,
+            role: m.sender === "visitor" ? "user" : "assistant",
+            content: m.content,
+            timestamp: new Date(m.timestamp)
+          }));
+          setChatMessages(parsedMsgs);
+          setSessionAiEnabled(data.aiEnabled);
+        }
+      } catch (err) {
+        console.error("Failed to poll visitor chat session:", err);
+      }
+    };
+
+    // Immediate initial sync
+    syncVisitorSession();
+
+    if (isAIChatOpen) {
+      intervalId = setInterval(syncVisitorSession, 2500); // 2.5s polling loop
+    }
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [chatSessionId, isAIChatOpen]);
+
+  // Admin Poll effect (polls when admin active tab is "chats")
+  useEffect(() => {
+    if (!isAdminLoggedIn || adminActiveTab !== "chats") return;
+    let intervalId: any = null;
+
+    const syncAdminSessionsList = async () => {
+      try {
+        const res = await fetch("/api/chat/sessions");
+        if (res.ok) {
+          const data = await res.json();
+          setAdminChatSessions(data.sessions || []);
+        }
+      } catch (err) {
+        console.error("Failed to poll admin sessions list:", err);
+      }
+    };
+
+    syncAdminSessionsList();
+    intervalId = setInterval(syncAdminSessionsList, 2500); // Poll list every 2.5s
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [isAdminLoggedIn, adminActiveTab]);
+
+  // Toggle Visitor AI auto-reply
+  const handleToggleVisitorAI = async (val: boolean) => {
+    setSessionAiEnabled(val);
+    try {
+      const res = await fetch("/api/chat/toggle-ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: chatSessionId, aiEnabled: val })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSessionAiEnabled(data.aiEnabled);
+      }
+    } catch (err) {
+      console.error("Error toggling AI auto-play mode:", err);
+    }
+  };
+
+  // Chat message sending pipeline with Server-side session API
   const handleSendAIChat = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!chatInput.trim() || isAILoading) return;
 
     const userPrompt = chatInput.trim();
-    const timestampStr = new Date();
-    
-    // Add User Message
-    const updatedMessages: ChatMessage[] = [
-      ...chatMessages,
-      {
-        id: `user-msg-${Date.now()}`,
-        role: "user",
-        content: userPrompt,
-        timestamp: timestampStr
-      }
-    ];
-
-    setChatMessages(updatedMessages);
     setChatInput("");
     setIsAILoading(true);
 
     try {
-      const response = await fetch("/api/chat", {
+      const response = await fetch("/api/chat/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: updatedMessages.map((m) => ({
-            role: m.role,
-            content: m.content
-          }))
+          sessionId: chatSessionId,
+          sender: "visitor",
+          content: userPrompt,
+          visitorName: visitorName.trim() || undefined
         })
       });
 
       if (!response.ok) {
-        throw new Error("API request failed with standard error.");
+        throw new Error("HTTP chat send failed.");
       }
 
       const data = await response.json();
-      setChatMessages((prev) => [
-        ...prev,
-        {
-          id: `ai-msg-${Date.now()}`,
-          role: "assistant",
-          content: data.content || "I apologize, I encountered an issue compiling a response. Please ask me again!",
-          timestamp: new Date()
-        }
-      ]);
+      const parsedMsgs: ChatMessage[] = data.messages.map((m: any) => ({
+        id: m.id,
+        role: m.sender === "visitor" ? "user" : "assistant",
+        content: m.content,
+        timestamp: new Date(m.timestamp)
+      }));
+      setChatMessages(parsedMsgs);
+      setSessionAiEnabled(data.aiEnabled);
     } catch (err) {
-      console.error("AI service failure:", err);
-      // Client-side fallback text to keep user experience smooth even during mock states
+      console.error("AI chat submit exception:", err);
+      // Clean fallback if backend goes raw offline
       setChatMessages((prev) => [
         ...prev,
         {
-          id: `ai-msg-err-${Date.now()}`,
+          id: `ai-local-fallback-${Date.now()}`,
+          role: "user",
+          content: userPrompt,
+          timestamp: new Date()
+        },
+        {
+          id: `ai-err-msg-${Date.now()}`,
           role: "assistant",
           content: "I'm executing in local sandbox node profile. Jean Baptiste is a professional developer specializing in PostgreSQL databases, Node.js, and client-side React. Let me know which of his projects you would like to audit, or type an inquiry!",
           timestamp: new Date()
@@ -770,6 +861,95 @@ export default function App() {
       ]);
     } finally {
       setIsAILoading(false);
+    }
+  };
+
+  // Admin Reply submission logic
+  const handleAdminSendReply = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!activeAdminSessionId || !adminReplyText.trim()) return;
+
+    const replyContent = adminReplyText.trim();
+    setAdminReplyText("");
+    setAiSuggestion(""); // Reset suggestion box
+
+    try {
+      const res = await fetch("/api/chat/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: activeAdminSessionId,
+          sender: "admin",
+          content: replyContent
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        // Sync local list state immediately
+        setAdminChatSessions(prev => prev.map(s => s.sessionId === activeAdminSessionId ? data : s));
+      }
+    } catch (err) {
+      console.error("Admin send reply failed:", err);
+    }
+  };
+
+  // Admin toggle AI assistant toggle
+  const handleAdminToggleAI = async (sessionId: string, val: boolean) => {
+    try {
+      const res = await fetch("/api/chat/toggle-ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, aiEnabled: val })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAdminChatSessions(prev => prev.map(s => s.sessionId === sessionId ? data : s));
+      }
+    } catch (err) {
+      console.error("Admin failed toggling ai:", err);
+    }
+  };
+
+  // Admin AI suggest helper draft
+  const handleAdminRequestSuggestion = async () => {
+    if (!activeAdminSessionId) return;
+    setIsSuggestionLoading(true);
+    setAiSuggestion("");
+
+    try {
+      const res = await fetch("/api/chat/suggest-ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: activeAdminSessionId })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAiSuggestion(data.suggestion);
+      }
+    } catch (err) {
+      console.error("Failed to call suggest-ai on backend:", err);
+    } finally {
+      setIsSuggestionLoading(false);
+    }
+  };
+
+  // Wipe chat session completely
+  const handleAdminDeleteSession = async (sessionId: string) => {
+    if (!window.confirm("Are you sure you want to permanently delete this chat session record?")) return;
+    try {
+      const res = await fetch("/api/chat/delete-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId })
+      });
+      if (res.ok) {
+        setAdminChatSessions(prev => prev.filter(s => s.sessionId !== sessionId));
+        if (activeAdminSessionId === sessionId) {
+          setActiveAdminSessionId(null);
+        }
+      }
+    } catch (err) {
+      console.error("Admin wipe chat failed:", err);
     }
   };
 
@@ -1005,6 +1185,7 @@ export default function App() {
                       { id: "project", label: "Add Project Integration", desc: "Introduce a system blueprint logs node", icon: <LayoutGrid className="w-4 h-4" /> },
                       { id: "skill", label: "Add Skill Specialty", desc: "Update expertise proficiency registers", icon: <Cpu className="w-4 h-4" /> },
                       { id: "gallery", label: "Manage Photo Gallery", desc: "Upload custom photos from your desktop", icon: <Camera className="w-4 h-4" /> },
+                      { id: "chats", label: "Live Visitor Chats", desc: "Real-time chats list and AI suggestion copilot", icon: <MessageSquare className="w-4 h-4" /> },
                       { id: "records", label: "Manage Active Clusters", desc: "View core matrix listings & drop node records", icon: <Activity className="w-4 h-4" /> }
                     ].map((item) => (
                       <button
@@ -1494,6 +1675,247 @@ export default function App() {
                             ))}
                           </div>
                         )}
+                      </div>
+                    </div>
+                  )}
+
+                  {adminActiveTab === "chats" && (
+                    <div className="space-y-6 animate-fade-in text-left">
+                      <div className="border-b border-neutral-900/50 pb-4">
+                        <h3 className="text-neutral-100 font-mono text-xs uppercase tracking-widest font-bold flex items-center gap-2">
+                          <MessageSquare className="w-4 h-4 text-orange-500" />
+                          <span>Live Chat Control Hub</span>
+                        </h3>
+                        <p className="text-[11px] font-mono text-neutral-500 mt-1">
+                          Synchronized live chat feed. Communicate directly with portfolio guests in real-time or activate the Gemini AI auto-responder.
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start font-mono text-xs">
+                        {/* LEFT COLUMN: ACTIVE CONVERSATIONS FEED */}
+                        <div className="md:col-span-4 space-y-4">
+                          <span className="text-[9px] font-bold text-neutral-500 uppercase tracking-widest block border-b border-neutral-900 pb-1.5">
+                            Conversations ({adminChatSessions.length})
+                          </span>
+
+                          {adminChatSessions.length === 0 ? (
+                            <div className="p-8 border border-neutral-900 rounded-2xl bg-neutral-950/40 text-center text-neutral-600">
+                              No active portfolio visitors yet.
+                            </div>
+                          ) : (
+                            <div className="space-y-2.5 max-h-[480px] overflow-y-auto pr-1 scrollbar-thin">
+                              {adminChatSessions.map((session) => {
+                                const isSelected = activeAdminSessionId === session.sessionId;
+                                const isOnline = Date.now() - session.lastActive < 45000;
+                                const lastMsg = session.messages[session.messages.length - 1];
+
+                                return (
+                                  <div
+                                    key={session.sessionId}
+                                    onClick={() => {
+                                      setActiveAdminSessionId(session.sessionId);
+                                      setAiSuggestion("");
+                                    }}
+                                    className={`p-3.5 rounded-xl border transition-all duration-200 cursor-pointer text-left relative flex flex-col gap-2 group ${
+                                      isSelected
+                                        ? "border-orange-500 bg-orange-500/[0.04] text-neutral-200"
+                                        : "border-neutral-900 bg-neutral-950/60 hover:bg-neutral-900/40 text-neutral-400 hover:text-neutral-200"
+                                    }`}
+                                  >
+                                    <div className="flex items-center justify-between gap-1">
+                                      <div className="flex items-center gap-1.5 min-w-0">
+                                        <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${isOnline ? "bg-green-500 animate-pulse" : "bg-neutral-700"}`} />
+                                        <span className="font-bold truncate text-[11px]">
+                                          {session.visitorName || "Anon Guest"}
+                                        </span>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleAdminDeleteSession(session.sessionId);
+                                        }}
+                                        className="p-1 rounded text-neutral-600 hover:text-red-500 hover:bg-red-500/10 transition-colors"
+                                        title="Wipe conversation trace"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+
+                                    {/* Preview message snippet */}
+                                    {lastMsg && (
+                                      <p className="text-[10px] text-neutral-550 truncate leading-snug">
+                                        <span className="font-semibold text-neutral-450 uppercase text-[9px] mr-1">
+                                          {lastMsg.sender === "admin" ? "you" : lastMsg.sender}:
+                                        </span>
+                                        {lastMsg.content}
+                                      </p>
+                                    )}
+
+                                    {/* AI and last active controls bar */}
+                                    <div className="flex items-center justify-between border-t border-neutral-900/60 pt-2 text-[9px]">
+                                      <span className="text-neutral-600">
+                                        Active: {new Date(session.lastActive).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                      </span>
+                                      <label
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="inline-flex items-center gap-1 cursor-pointer hover:text-orange-400 transition-colors"
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={session.aiEnabled}
+                                          onChange={(e) => handleAdminToggleAI(session.sessionId, e.target.checked)}
+                                          className="sr-only"
+                                        />
+                                        <span className={session.aiEnabled ? "text-orange-500 font-bold" : "text-neutral-600"}>
+                                          AI {session.aiEnabled ? "ON" : "OFF"}
+                                        </span>
+                                      </label>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* RIGHT COLUMN: CHAT THREAD CONSOLE */}
+                        <div className="md:col-span-8 flex flex-col gap-4">
+                          <span className="text-[9px] font-bold text-neutral-500 uppercase tracking-widest block border-b border-neutral-900 pb-1.5">
+                            Live Workspace Console
+                          </span>
+
+                          {activeAdminSessionId === null ? (
+                            <div className="p-12 border border-neutral-900 bg-neutral-950/20 rounded-2xl flex flex-col items-center justify-center text-center gap-3.5 text-neutral-550 min-h-[360px]">
+                              <Sparkles className="w-8 h-8 text-neutral-700 animate-pulse" />
+                              <div className="space-y-1">
+                                <p className="font-bold text-neutral-400">No session selected</p>
+                                <p className="max-w-xs text-[10.5px] leading-relaxed">
+                                  Click on any visitor conversation card in the left column switchboard to begin live interaction.
+                                </p>
+                              </div>
+                            </div>
+                          ) : (
+                            (() => {
+                              const activeSession = adminChatSessions.find(s => s.sessionId === activeAdminSessionId);
+                              if (!activeSession) {
+                                return (
+                                  <div className="p-8 text-center text-neutral-600">
+                                    Syncing session buffer...
+                                  </div>
+                                );
+                              }
+
+                              return (
+                                <div className="space-y-4 animate-fade-in">
+                                  {/* Thread Header */}
+                                  <div className="flex items-center justify-between p-3.5 bg-neutral-950/80 border border-neutral-900 rounded-xl">
+                                    <div className="space-y-1 min-w-0">
+                                      <p className="font-bold text-neutral-200 truncate">{activeSession.visitorName}</p>
+                                      <p className="text-[9.5px] text-neutral-600">ID: {activeSession.sessionId}</p>
+                                    </div>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                      <span className={`px-2.5 py-1 rounded text-[9px] font-bold ${
+                                        activeSession.aiEnabled
+                                          ? "bg-green-500/10 border border-green-500/20 text-green-400"
+                                          : "bg-neutral-900 border border-neutral-850 text-neutral-550"
+                                      }`}>
+                                        AI AUTO-REPLY: {activeSession.aiEnabled ? "ACTIVE" : "PAUSED"}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {/* Thread Flow Scroll Container */}
+                                  <div className="flex flex-col gap-4 p-4 border border-neutral-900 bg-neutral-950/60 rounded-2xl h-[300px] overflow-y-auto scrollbar-thin">
+                                    {activeSession.messages.map((m: any) => (
+                                      <div
+                                        key={m.id}
+                                        className={`flex ${m.sender === "admin" ? "justify-end" : "justify-start"}`}
+                                      >
+                                        <div
+                                          className={`max-w-[85%] rounded-xl px-4 py-3 text-[11.5px] leading-relaxed relative ${
+                                            m.sender === "admin"
+                                              ? "bg-orange-500 text-white font-medium"
+                                              : m.sender === "ai"
+                                                ? "bg-neutral-900 border border-neutral-850 text-neutral-300"
+                                                : "bg-neutral-200 text-neutral-950 font-medium"
+                                          }`}
+                                        >
+                                          {/* Sender handle */}
+                                          <div className={`text-[8.5px] uppercase font-bold tracking-wider mb-1 opacity-60 flex items-center gap-1 ${
+                                            m.sender === "admin" ? "text-orange-105" : m.sender === "ai" ? "text-orange-500" : "text-neutral-600"
+                                          }`}>
+                                            <span>{m.sender === "admin" ? "YOU (Admin)" : m.sender === "ai" ? "AI Rep (Gemini)" : "Visitor"}</span>
+                                          </div>
+
+                                          <p className="whitespace-pre-wrap">{m.content}</p>
+
+                                          <span className="text-[8.5px] block mt-1.5 text-right opacity-50 font-mono">
+                                            {new Date(m.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+
+                                  {/* AI SUGGESTION COPILOT COMPONENT */}
+                                  <div className="p-3.5 border border-dashed border-orange-500/30 rounded-2xl bg-orange-500/[0.015] space-y-2.5">
+                                    <div className="flex items-center justify-between">
+                                      <p className="text-[10px] uppercase font-bold text-orange-400 tracking-wider flex items-center gap-1.5">
+                                        <Sparkles className="w-3.5 h-3.5 animate-pulse text-orange-500" />
+                                        <span>AI Suggestion Copilot Drafting</span>
+                                      </p>
+                                      <button
+                                        type="button"
+                                        disabled={isSuggestionLoading}
+                                        onClick={handleAdminRequestSuggestion}
+                                        className="px-2.5 py-1 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/20 hover:border-orange-500/30 font-bold transition-all rounded text-[9.5px] uppercase cursor-pointer"
+                                      >
+                                        {isSuggestionLoading ? "Synthesizing..." : "Generate AI Reply"}
+                                      </button>
+                                    </div>
+
+                                    {aiSuggestion && (
+                                      <div className="p-3 rounded-xl border border-neutral-900 bg-neutral-950 text-[11px] leading-relaxed text-neutral-300 space-y-2">
+                                        <p className="italic text-neutral-300">"{aiSuggestion}"</p>
+                                        <div className="flex justify-end">
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setAdminReplyText(aiSuggestion);
+                                              setAiSuggestion("");
+                                            }}
+                                            className="px-2.5 py-1 bg-neutral-105 text-neutral-950 font-bold rounded text-[9px] uppercase tracking-wide hover:bg-white active:scale-95 transition-all cursor-pointer"
+                                          >
+                                            Accept & Load to Input
+                                          </button>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Reply execution input form */}
+                                  <form onSubmit={handleAdminSendReply} className="flex gap-2.5 items-center">
+                                    <input
+                                      type="text"
+                                      value={adminReplyText}
+                                      onChange={(e) => setAdminReplyText(e.target.value)}
+                                      placeholder="Write direct live response to client..."
+                                      className="flex-grow bg-neutral-950 text-xs border border-neutral-900 rounded-xl px-4 py-3 placeholder-neutral-700 focus:outline-none focus:ring-1 focus:ring-orange-500 font-mono"
+                                    />
+                                    <button
+                                      type="submit"
+                                      disabled={!adminReplyText.trim()}
+                                      className="p-3 bg-orange-500 border-none text-white rounded-xl hover:bg-orange-600 font-bold disabled:opacity-40 transition-colors shrink-0 cursor-pointer"
+                                    >
+                                      <Send className="w-4 h-4" />
+                                    </button>
+                                  </form>
+                                </div>
+                              );
+                            })()
+                          )}
+                        </div>
                       </div>
                     </div>
                   )}
@@ -3118,26 +3540,115 @@ export default function App() {
       </motion.section>
 
       {/* Elegant minimalist styled Footer */}
-      <footer className="border-t border-neutral-900/50 py-12 px-6">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-2 font-mono text-xs">
-            <span className="text-neutral-400 font-semibold">TJB<span className="text-orange-500">.</span></span>
-            <span className="text-neutral-750">|</span>
-            <span className="text-neutral-600">{t.footerCopyright} &copy; {new Date().getFullYear()}</span>
+      <footer className="border-t border-neutral-900/50 bg-neutral-950/40 backdrop-blur-md pt-16 pb-12 px-6 relative overflow-hidden">
+        {/* Soft background glow */}
+        <div className="absolute top-0 left-1/4 w-[300px] h-[150px] rounded-full bg-orange-500/3 blur-[80px] pointer-events-none" />
+        
+        <div className="max-w-7xl mx-auto space-y-12">
+          {/* Main Footer Content */}
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-10 items-start">
+            
+            {/* Developer Identity & Bweyeye Sector Rwanda info */}
+            <div className="md:col-span-5 space-y-4">
+              <div className="flex items-center gap-2 font-mono text-sm">
+                <span className="text-neutral-250 font-bold tracking-wider">TJB<span className="text-orange-500">.</span> Portfolio</span>
+              </div>
+              <p className="text-neutral-450 font-light text-xs leading-relaxed max-w-sm">
+                Tuyishime Jean Baptiste is a dedicated software developer passionate about building high-performance, resilient, and beautiful system nodes.
+              </p>
+              {/* Origin info box */}
+              <div className="flex gap-3 p-4 bg-neutral-900/20 border border-neutral-900/60 rounded-2xl max-w-sm">
+                <div className="w-9 h-9 rounded-xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center shrink-0">
+                  <MapPin className="w-4.5 h-4.5 text-orange-500" />
+                </div>
+                <div className="space-y-1">
+                  <span className="text-[10px] uppercase font-mono tracking-wider font-bold text-neutral-400 block">Origin Location</span>
+                  <p className="text-[11px] text-neutral-450 leading-relaxed font-sans">
+                    Proudly hail from <span className="text-neutral-250 font-medium font-mono">Bweyeye sector, Rusizi District, Western Province, Rwanda</span> — a vibrant mountainous region adjacent to the majestic Nyungwe Forest.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Links Section */}
+            <div className="md:col-span-3 space-y-4">
+              <span className="text-[10px] uppercase font-mono tracking-[0.2em] font-bold text-neutral-500 block">Portal Navigation</span>
+              <ul className="space-y-2.5 font-mono text-xs">
+                {[
+                  "Home_#home",
+                  "Projects_#projects",
+                  "Competencies_#skills",
+                  "Experience_#experience",
+                  "Contact_#contact"
+                ].map((link) => {
+                  const [name, target] = link.split("_");
+                  return (
+                    <li key={target}>
+                      <a
+                        href={target}
+                        className="text-neutral-450 hover:text-orange-500 transition-colors flex items-center gap-1.5"
+                      >
+                        <span className="text-orange-500/50 font-semibold">•</span>
+                        <span>{name}</span>
+                      </a>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+
+            {/* RealChat AI section & quick launcher */}
+            <div className="md:col-span-4 space-y-4">
+              <span className="text-[10px] uppercase font-mono tracking-[0.2em] font-bold text-neutral-500 block">AI Integration Hub</span>
+              <div className="p-5 bg-orange-500/[0.02] border border-orange-500/10 hover:border-orange-500/20 rounded-2xl space-y-4 transition-all duration-300">
+                <div className="space-y-1.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shrink-0" />
+                      <span className="text-[10px] uppercase font-mono tracking-wider text-green-400 font-bold">RealChat AI Online</span>
+                    </div>
+                    <span className="text-[9px] px-2 py-0.5 rounded bg-orange-500/10 border border-orange-500/20 text-orange-400 font-mono font-bold uppercase tracking-wider">
+                      Gemini 3.5 Flash
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-neutral-450 leading-relaxed font-sans">
+                    Connect immediately with my responsive Gemini 3.5 Flash powered AI copilot. I am also paged directly to reply in real-time.
+                  </p>
+                </div>
+                
+                <button
+                  type="button"
+                  onClick={() => setIsAIChatOpen(true)}
+                  className="w-full py-3 px-4 bg-orange-500 hover:bg-orange-600 text-white font-mono text-[11px] uppercase tracking-wider rounded-xl transition-all font-bold flex items-center justify-center gap-2 group shadow-lg shadow-orange-500/5 cursor-pointer active:scale-98"
+                >
+                  <MessageSquare className="w-4 h-4 text-white group-hover:scale-110 transition-transform" />
+                  <span>RealChat AI With Me</span>
+                  <ArrowRight className="w-3.5 h-3.5 text-orange-200 group-hover:translate-x-1 transition-transform" />
+                </button>
+              </div>
+            </div>
+
           </div>
 
-          <div className="flex items-center gap-4 text-neutral-500 text-xs font-mono">
-            <span>{t.footerRights}</span>
-            <span className="text-neutral-850">|</span>
-            <button
-              id="admin-console-trigger"
-              onClick={() => navigateTo("/admin")}
-              className="flex items-center gap-1.5 text-neutral-600 hover:text-orange-500 transition-colors cursor-pointer font-bold uppercase tracking-wider"
-              title="System Control Gate"
-            >
-              <Lock className="w-3.5 h-3.5" />
-              <span>Console Login</span>
-            </button>
+          {/* Bottom Bar copyright & login */}
+          <div className="pt-8 border-t border-neutral-900/50 flex flex-col sm:flex-row items-center justify-between gap-6 font-mono text-[11px]">
+            <div className="text-neutral-500">
+              <span>{t.footerCopyright} &copy; {new Date().getFullYear()} TJB. All rights Reserved.</span>
+            </div>
+            
+            <div className="flex items-center gap-4 text-neutral-500">
+              <span>{t.footerRights}</span>
+              <span className="text-neutral-850">|</span>
+              <button
+                id="admin-console-trigger"
+                onClick={() => navigateTo("/admin")}
+                className="flex items-center gap-1.5 text-neutral-600 hover:text-orange-500 transition-colors cursor-pointer font-bold uppercase tracking-wider"
+                title="System Control Gate"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span>Console Login</span>
+              </button>
+            </div>
           </div>
         </div>
       </footer>
@@ -3164,20 +3675,55 @@ export default function App() {
               className="relative w-full max-w-md bg-neutral-950 border-l border-neutral-900 h-full flex flex-col justify-between shadow-2xl z-10"
             >
               {/* Header */}
-              <div className="p-4 bg-neutral-900/50 border-b border-neutral-900 flex items-center justify-between">
-                <div className="flex items-center gap-2.5 font-mono text-xs">
-                  <div className="w-2.5 h-2.5 rounded-full bg-orange-500 animate-pulse shrink-0" />
-                  <div>
-                    <h3 className="font-bold text-neutral-100">AI Portfolio Assistant</h3>
-                    <p className="text-[10px] text-neutral-500">Powered by Gemini 3.5 Flash</p>
+              <div className="p-4 bg-neutral-900/50 border-b border-neutral-900 flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5 font-mono text-xs">
+                    <div className="w-2.5 h-2.5 rounded-full bg-orange-500 animate-pulse shrink-0" />
+                    <div>
+                      <h3 className="font-bold text-neutral-100">Live Chat & AI Copilot</h3>
+                      <p className="text-[10px] text-neutral-500 font-mono">Status: Connected to Baptiste</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setIsAIChatOpen(false)}
+                    className="p-1.5 rounded-lg border border-neutral-900 hover:bg-neutral-900 text-neutral-400 hover:text-neutral-100 transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Nickname & AI Controls Row */}
+                <div className="grid grid-cols-2 gap-2 text-[11px] font-mono border-t border-neutral-900 pt-2.5">
+                  <div className="space-y-1">
+                    <span className="text-[9px] text-neutral-550 block font-bold uppercase">Your Nickname</span>
+                    <input
+                      type="text"
+                      placeholder="Recruiter / Guest"
+                      value={visitorName}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setVisitorName(val);
+                        localStorage.setItem("tjb_portfolio_visitor_name", val);
+                      }}
+                      className="w-full bg-neutral-950 text-[10px] border border-neutral-900 rounded px-2 py-1 text-neutral-250 focus:outline-none focus:border-orange-500"
+                    />
+                  </div>
+                  <div className="space-y-1 flex flex-col justify-between items-end">
+                    <span className="text-[9px] text-neutral-550 block font-bold uppercase text-right w-full">AI Auto-Reply</span>
+                    <label className="inline-flex items-center gap-1.5 cursor-pointer text-neutral-450 hover:text-neutral-250">
+                      <input
+                        type="checkbox"
+                        checked={sessionAiEnabled}
+                        onChange={(e) => handleToggleVisitorAI(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="relative w-7 h-4 bg-neutral-900 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-neutral-500 after:border-neutral-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-orange-500 peer-checked:after:bg-neutral-950"></div>
+                      <span className="text-[10px]">
+                        {sessionAiEnabled ? "ON" : "OFF"}
+                      </span>
+                    </label>
                   </div>
                 </div>
-                <button
-                  onClick={() => setIsAIChatOpen(false)}
-                  className="p-1.5 rounded-lg border border-neutral-900 hover:bg-neutral-900 text-neutral-400 hover:text-neutral-100 transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
               </div>
 
               {/* Chat Log messages flow */}
