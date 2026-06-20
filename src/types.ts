@@ -51,3 +51,16 @@ export interface VisitorMessage {
   message: string;
   timestamp: string;
 }
+
+export interface SchoolNode {
+  id: string;
+  level: string;
+  name: string;
+  tag: string;
+  duration: string;
+  distinction: string;
+  highlights: string[];
+  desc: string;
+  descRw?: string;
+}
+

@@ -1,4 +1,4 @@
-import { Project, SkillCategory, Service, Testimonial } from "./types";
+import { Project, SkillCategory, Service, Testimonial, SchoolNode } from "./types";
 
 export const PROJECTS: Project[] = [
   {
@@ -211,3 +211,51 @@ export const TESTIMONIALS: Testimonial[] = [
     avatarSeed: "eric"
   }
 ];
+
+export const SCHOOLS: SchoolNode[] = [
+  {
+    id: "eden",
+    level: "Primary Education",
+    name: "EDEN SCHOOL",
+    tag: "Logical Foundations",
+    duration: "2009 - 2014",
+    distinction: "Distinction in Mathematics",
+    highlights: ["Analytical Mindset", "Math & Logic", "Problem Solving"],
+    desc: "Cultivated foundational logical thinking, mathematical proficiency, and structured analysis. Established the mathematical baseline for high-grade computational design and engineering architectures.",
+    descRw: "Urufatiro rwo kubara, gusesengura no gutekereza neza mu buryo bwa gihanga. Aha ni ho hantu hashyizwe urufatiro rw'imibare rufasha mu gushushanya na porogaramu za mudasobwa zigezweho."
+  },
+  {
+    id: "kamambe",
+    level: "Secondary O-Level",
+    name: "KAMAMBE",
+    tag: "Scientific Methodology",
+    duration: "2015 - 2017",
+    distinction: "Top Tier Physics Club Lead",
+    highlights: ["Natural Sciences", "Systematic Logic", "Team Collaboration"],
+    desc: "Engaged in scientific methodologies comprising biology, mathematics, and complex physics patterns. Built exceptional communication protocols and collaborative logic models.",
+    descRw: "Hano hiciwe ubumenyi bw'ibanze mu mibare n'ubugenge (Sciences). Twahoraga twitoza gukorera mu matsinda no gukemura ibibazo biteye amatsiko mu buryo bufatika."
+  },
+  {
+    id: "giheke",
+    level: "A2 Secondary",
+    name: "GIHEKE TSS",
+    tag: "Technical Instruction Node",
+    duration: "2018 - 2020",
+    distinction: "Software Systems Gold Medalist",
+    highlights: ["Software Dev", "IP Routing", "DBMS Foundations"],
+    desc: "Rigorous hands-on immersion in software application development, TCP/IP network infrastructures, database engines, and logical configuration management. Graduated top-of-class with professional system software designs.",
+    descRw: "Isomo rishyira mu bikorwa ryo gukora porogaramu, gushyiraho imiyoboro y'itumanaho (Networks), no kubaka amadashibodi y'amakuru. Twarangije ku isonga dufite ubumenyi bwo kubaka porogaramu."
+  },
+  {
+    id: "nyanza",
+    level: "Higher Education A1 & A0",
+    name: "IPRC NYANZA",
+    tag: "Full-Stack System Engineering",
+    duration: "2021 - 2024",
+    distinction: "Engineering Excellence Lead Candidate",
+    highlights: ["Advanced Software Eng", "System Architecture", "Telemetry APIs"],
+    desc: "Acquired elite theoretical and practical expertise (A1 & A0 credentials) covering advanced algorithms, cloud microservices, architectural patterns, relational database optimization, and high-performance server routines.",
+    descRw: "Amashuri makuru na kaminuza mu gukora porogaramu zikomye (Software Engineering), amategeko arinda urubuga, kubaka za API zihuta no gusesengura mudasobwa mu buryo buhanitse (A1 & A0)."
+  }
+];
+

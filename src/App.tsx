@@ -55,11 +55,12 @@ import {
   Award,
   BookOpen
 } from "lucide-react";
-import { PROJECTS, SKILL_CATEGORIES, SERVICES, TESTIMONIALS } from "./data";
-import { Project, ChatMessage, VisitorMessage, SkillCategory } from "./types";
+import { PROJECTS, SKILL_CATEGORIES, SERVICES, TESTIMONIALS, SCHOOLS } from "./data";
+import { Project, ChatMessage, VisitorMessage, SkillCategory, SchoolNode } from "./types";
 import { TRANSLATIONS, BAPTISTE_GALLERY } from "./translations";
 import { WebGLShader } from "./components/ui/web-gl-shader";
 import { LiquidButton } from "./components/ui/liquid-glass-button";
+import { ImageCropperModal } from "./components/ImageCropperModal";
 
 const scrollRevealVariants = {
   hidden: { opacity: 0, y: 35 },
@@ -125,9 +126,32 @@ export default function App() {
     return BAPTISTE_GALLERY;
   });
 
+  const [schools, setSchools] = useState<SchoolNode[]>(() => {
+    const saved = localStorage.getItem("tjb_portfolio_schools");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error("Error loading schools:", e);
+      }
+    }
+    return SCHOOLS;
+  });
+
+  const [newSchoolLevel, setNewSchoolLevel] = useState("");
+  const [newSchoolName, setNewSchoolName] = useState("");
+  const [newSchoolTag, setNewSchoolTag] = useState("");
+  const [newSchoolDuration, setNewSchoolDuration] = useState("");
+  const [newSchoolDistinction, setNewSchoolDistinction] = useState("");
+  const [newSchoolHighlights, setNewSchoolHighlights] = useState("");
+  const [newSchoolDesc, setNewSchoolDesc] = useState("");
+  const [newSchoolDescRw, setNewSchoolDescRw] = useState("");
+  const [editingSchoolId, setEditingSchoolId] = useState<string | null>(null);
+
   const [newGalleryTitle, setNewGalleryTitle] = useState("");
   const [newGalleryDesc, setNewGalleryDesc] = useState("");
   const [newGalleryImage, setNewGalleryImage] = useState("");
+  const [newGalleryImages, setNewGalleryImages] = useState<string[]>([]);
   const [editingGalleryId, setEditingGalleryId] = useState<string | null>(null);
 
   const getProjectImage = (project: Project) => {
@@ -161,7 +185,7 @@ export default function App() {
   const [adminPassword, setAdminPassword] = useState("");
   const [adminError, setAdminError] = useState("");
   const [adminSuccessMsg, setAdminSuccessMsg] = useState("");
-  const [adminActiveTab, setAdminActiveTab] = useState<"project" | "skill" | "gallery" | "records" | "chats">("project");
+  const [adminActiveTab, setAdminActiveTab] = useState<"project" | "skill" | "gallery" | "school" | "records" | "chats">("project");
 
   // Admin Live Chat management
   const [adminChatSessions, setAdminChatSessions] = useState<any[]>([]);
@@ -186,6 +210,14 @@ export default function App() {
   const [supabaseActive, setSupabaseActive] = useState<boolean>(false);
   const [skillsLoading, setSkillsLoading] = useState<boolean>(true);
   const [selectedSchoolNode, setSelectedSchoolNode] = useState<string>("nyanza");
+
+  // Image cropper state
+  const [cropperOpen, setCropperOpen] = useState<boolean>(false);
+  const [cropperSrc, setCropperSrc] = useState<string>("");
+  const [cropperTarget, setCropperTarget] = useState<"project" | "gallery" | null>(null);
+  const [cropperAspect, setCropperAspect] = useState<"1:1" | "16:9" | "4:3" | "free">("1:1");
+  const [cropQueue, setCropQueue] = useState<string[]>([]);
+  const [cropQueueIndex, setCropQueueIndex] = useState<number>(0);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -466,14 +498,126 @@ export default function App() {
       setProjects(PROJECTS);
       setSkillCategories(SKILL_CATEGORIES);
       setGalleryImages(BAPTISTE_GALLERY);
+      setSchools(SCHOOLS);
       localStorage.removeItem("tjb_portfolio_projects");
       localStorage.removeItem("tjb_portfolio_skill_categories");
       localStorage.removeItem("tjb_portfolio_gallery");
+      localStorage.removeItem("tjb_portfolio_schools");
       setAdminSuccessMsg("Registers flushed. Initial state restored.");
     }
   };
 
-  // Convert uploaded files safely to inline base64
+  const handleAddSchool = (e: React.FormEvent) => {
+    e.preventDefault();
+    setAdminError("");
+    setAdminSuccessMsg("");
+
+    if (!newSchoolName.trim() || !newSchoolLevel.trim() || !newSchoolTag.trim() || !newSchoolDuration.trim() || !newSchoolDesc.trim()) {
+      setAdminError("Please populate Name, Level, Tag, Duration, and English Description.");
+      return;
+    }
+
+    const highlightsArray = newSchoolHighlights
+      ? newSchoolHighlights.split(",").map(h => h.trim()).filter(Boolean)
+      : ["Academic Node"];
+
+    if (editingSchoolId) {
+      const updated = schools.map((s) =>
+        s.id === editingSchoolId
+          ? {
+              ...s,
+              level: newSchoolLevel.trim(),
+              name: newSchoolName.trim().toUpperCase(),
+              tag: newSchoolTag.trim(),
+              duration: newSchoolDuration.trim(),
+              distinction: newSchoolDistinction.trim(),
+              highlights: highlightsArray,
+              desc: newSchoolDesc.trim(),
+              descRw: newSchoolDescRw.trim() || undefined
+            }
+          : s
+      );
+      setSchools(updated);
+      localStorage.setItem("tjb_portfolio_schools", JSON.stringify(updated));
+      setEditingSchoolId(null);
+      setAdminSuccessMsg("Academic trajectory node updated successfully!");
+    } else {
+      const newSchool: SchoolNode = {
+        id: `s-custom-${Date.now()}`,
+        level: newSchoolLevel.trim(),
+        name: newSchoolName.trim().toUpperCase(),
+        tag: newSchoolTag.trim(),
+        duration: newSchoolDuration.trim(),
+        distinction: newSchoolDistinction.trim() || "Academic Distinction Verified",
+        highlights: highlightsArray,
+        desc: newSchoolDesc.trim(),
+        descRw: newSchoolDescRw.trim() || undefined
+      };
+      const updated = [...schools, newSchool];
+      setSchools(updated);
+      localStorage.setItem("tjb_portfolio_schools", JSON.stringify(updated));
+      setAdminSuccessMsg("New academic trajectory node successfully published!");
+    }
+
+    // Reset Form
+    setNewSchoolLevel("");
+    setNewSchoolName("");
+    setNewSchoolTag("");
+    setNewSchoolDuration("");
+    setNewSchoolDistinction("");
+    setNewSchoolHighlights("");
+    setNewSchoolDesc("");
+    setNewSchoolDescRw("");
+  };
+
+  const handleEditSchoolInit = (id: string) => {
+    const target = schools.find((s) => s.id === id);
+    if (target) {
+      setNewSchoolLevel(target.level);
+      setNewSchoolName(target.name);
+      setNewSchoolTag(target.tag);
+      setNewSchoolDuration(target.duration);
+      setNewSchoolDistinction(target.distinction || "");
+      setNewSchoolHighlights(target.highlights.join(", "));
+      setNewSchoolDesc(target.desc);
+      setNewSchoolDescRw(target.descRw || "");
+      setEditingSchoolId(id);
+      setAdminSuccessMsg(`School node loaded for calibration: "${target.name}"`);
+    }
+  };
+
+  const handleCancelEditSchool = () => {
+    setNewSchoolLevel("");
+    setNewSchoolName("");
+    setNewSchoolTag("");
+    setNewSchoolDuration("");
+    setNewSchoolDistinction("");
+    setNewSchoolHighlights("");
+    setNewSchoolDesc("");
+    setNewSchoolDescRw("");
+    setEditingSchoolId(null);
+    setAdminSuccessMsg("School node calibration canceled.");
+  };
+
+  const handleDeleteSchool = (id: string) => {
+    if (window.confirm("Delete this academic registry node from portfolio? This is irreversible.")) {
+      const updated = schools.filter((s) => s.id !== id);
+      setSchools(updated);
+      localStorage.setItem("tjb_portfolio_schools", JSON.stringify(updated));
+      
+      // If we deleted the active view, select another one or reset to empty/first
+      if (selectedSchoolNode === id) {
+        if (updated.length > 0) {
+          setSelectedSchoolNode(updated[0].id);
+        } else {
+          setSelectedSchoolNode("");
+        }
+      }
+      setAdminSuccessMsg("School node excised from academic timeline registry.");
+    }
+  };
+
+  // Convert uploaded files safely to inline base64 and initiate premium cropping calibration
   const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -483,27 +627,100 @@ export default function App() {
       }
       const reader = new FileReader();
       reader.onloadend = () => {
-        setNewProjectImage(reader.result as string);
-        setAdminSuccessMsg("Asset uploaded and processed successfully.");
+        setCropperSrc(reader.result as string);
+        setCropperTarget("project");
+        setCropperAspect("16:9");
+        setCropperOpen(true);
+        setAdminSuccessMsg("Asset loaded. Please align, adjust and crop your project graphic illustration.");
       };
       reader.readAsDataURL(file);
+      e.target.value = "";
     }
   };
 
   const handleGalleryImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        setAdminError("File is too large. Limit is 2MB for storage consistency.");
-        return;
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      const validFiles: File[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (file.size > 2 * 1024 * 1024) {
+          setAdminError(`File "${file.name}" is too large. Limit is 2MB for storage consistency.`);
+          continue;
+        }
+        validFiles.push(file);
       }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setNewGalleryImage(reader.result as string);
-        setAdminSuccessMsg("Gallery image asset uploaded and parsed.");
-      };
-      reader.readAsDataURL(file);
+
+      if (validFiles.length === 0) return;
+
+      const loadedUrls: string[] = [];
+      let loadedCount = 0;
+
+      validFiles.forEach((file, index) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          loadedUrls[index] = reader.result as string;
+          loadedCount++;
+          if (loadedCount === validFiles.length) {
+            const finalUrls = loadedUrls.filter(Boolean);
+            setCropQueue(finalUrls);
+            setCropQueueIndex(0);
+            
+            // Set up cropper states for the FIRST image in the queue
+            setCropperSrc(finalUrls[0]);
+            setCropperTarget("gallery");
+            setCropperAspect("1:1");
+            setCropperOpen(true);
+            setAdminSuccessMsg(`Photo 1 of ${finalUrls.length} loaded. Align and crop to begin.`);
+          }
+        };
+        reader.readAsDataURL(file);
+      });
+
+      e.target.value = "";
     }
+  };
+
+  const handleCropperComplete = (croppedBase64: string) => {
+    if (cropperTarget === "project") {
+      setNewProjectImage(croppedBase64);
+      setAdminSuccessMsg("Project graphic alignment metrics cropped and finalized successfully.");
+      setCropperOpen(false);
+      setCropperTarget(null);
+    } else if (cropperTarget === "gallery") {
+      // Append to list of cropped images
+      setNewGalleryImages((prev) => {
+        const updated = [...prev, croppedBase64];
+        // For backwards compatibility, keep single newGalleryImage set with the first item
+        if (updated.length === 1) {
+          setNewGalleryImage(croppedBase64);
+        }
+        return updated;
+      });
+
+      const nextIdx = cropQueueIndex + 1;
+      if (cropQueue.length > 0 && nextIdx < cropQueue.length) {
+        // Sequentially load the next file from our cropping queue
+        setCropQueueIndex(nextIdx);
+        setCropperSrc(cropQueue[nextIdx]);
+        setAdminSuccessMsg(`Photo ${nextIdx + 1} of ${cropQueue.length} cropped. Align and crop this next segment.`);
+      } else {
+        // Reached end of sequential queue
+        setCropQueue([]);
+        setCropQueueIndex(0);
+        setCropperOpen(false);
+        setCropperTarget(null);
+        setAdminSuccessMsg("All selected photo nodes have been cropped and enqueued for publication.");
+      }
+    }
+  };
+
+  const handleCropperCancel = () => {
+    setCropperOpen(false);
+    setCropperTarget(null);
+    setCropQueue([]);
+    setCropQueueIndex(0);
+    setAdminSuccessMsg("Cropper workflow discarded.");
   };
 
   const handleAddGalleryImage = (e: React.FormEvent) => {
@@ -511,16 +728,19 @@ export default function App() {
     setAdminError("");
     setAdminSuccessMsg("");
 
-    if (!newGalleryTitle.trim() || !newGalleryDesc.trim() || !newGalleryImage) {
-      setAdminError("Please populate Title, Description, and select an image file from your desktop.");
+    const activeImageSrcs = newGalleryImages.length > 0 ? newGalleryImages : (newGalleryImage ? [newGalleryImage] : []);
+
+    if (!newGalleryTitle.trim() || !newGalleryDesc.trim() || activeImageSrcs.length === 0) {
+      setAdminError("Please populate Title, Description, and select at least one image file from your desktop.");
       return;
     }
 
     if (editingGalleryId) {
       const originalImage = galleryImages.find((img) => img.id === editingGalleryId);
+      const targetSrc = activeImageSrcs[0];
       const updated = galleryImages.map((img) =>
         img.id === editingGalleryId
-          ? { ...img, title: newGalleryTitle.trim(), desc: newGalleryDesc.trim(), url: newGalleryImage }
+          ? { ...img, title: newGalleryTitle.trim(), desc: newGalleryDesc.trim(), url: targetSrc }
           : img
       );
       setGalleryImages(updated);
@@ -528,29 +748,48 @@ export default function App() {
       
       // Keep active image state synchronized if the modified image was the currently selected preview
       if (originalImage && activeGalleryImage === originalImage.url) {
-        setActiveGalleryImage(newGalleryImage);
+        setActiveGalleryImage(targetSrc);
       }
 
       setEditingGalleryId(null);
       setAdminSuccessMsg("Gallery image updated successfully!");
     } else {
-      const newPhoto = {
-        id: `g-custom-${Date.now()}`,
-        url: newGalleryImage,
-        title: newGalleryTitle.trim(),
-        desc: newGalleryDesc.trim()
-      };
+      let updated = [...galleryImages];
+      
+      if (activeImageSrcs.length === 1) {
+        const newPhoto = {
+          id: `g-custom-${Date.now()}`,
+          url: activeImageSrcs[0],
+          title: newGalleryTitle.trim(),
+          desc: newGalleryDesc.trim()
+        };
+        updated.push(newPhoto);
+      } else {
+        // Publish multiple separately
+        activeImageSrcs.forEach((src, idx) => {
+          const serialNum = idx + 1;
+          const totalNum = activeImageSrcs.length;
+          const customTitle = `${newGalleryTitle.trim()} [Photo ${serialNum}/${totalNum}]`;
+          const newPhoto = {
+            id: `g-custom-${Date.now()}-${idx}`,
+            url: src,
+            title: customTitle,
+            desc: newGalleryDesc.trim()
+          };
+          updated.push(newPhoto);
+        });
+      }
 
-      const updated = [...galleryImages, newPhoto];
       setGalleryImages(updated);
       localStorage.setItem("tjb_portfolio_gallery", JSON.stringify(updated));
-      setAdminSuccessMsg("Gallery image published to the photostream successfully!");
+      setAdminSuccessMsg(`Successfully published ${activeImageSrcs.length} separate photo nodes to the interactive photostream!`);
     }
 
     // Clear form
     setNewGalleryTitle("");
     setNewGalleryDesc("");
     setNewGalleryImage("");
+    setNewGalleryImages([]);
   };
 
   const handleEditGalleryInit = (id: string) => {
@@ -560,6 +799,7 @@ export default function App() {
       setNewGalleryTitle(target.title);
       setNewGalleryDesc(target.desc);
       setNewGalleryImage(target.url);
+      setNewGalleryImages([target.url]);
       setAdminSuccessMsg(`Ready to edit: "${target.title}"`);
     }
   };
@@ -569,6 +809,7 @@ export default function App() {
     setNewGalleryTitle("");
     setNewGalleryDesc("");
     setNewGalleryImage("");
+    setNewGalleryImages([]);
     setAdminSuccessMsg("Editing canceled.");
   };
 
@@ -582,6 +823,7 @@ export default function App() {
       setNewGalleryTitle("");
       setNewGalleryDesc("");
       setNewGalleryImage("");
+      setNewGalleryImages([]);
     }
     // Synchronize selected preview if the active gallery image is being deleted
     if (target && activeGalleryImage === target.url) {
@@ -1048,6 +1290,21 @@ export default function App() {
     }
   };
 
+  const renderSchoolIcon = (school: SchoolNode) => {
+    const lvl = school.level.toLowerCase();
+    const id = school.id.toLowerCase();
+    if (lvl.includes("primary") || id.includes("eden")) {
+      return <BookOpen className="w-5 h-5" />;
+    }
+    if (lvl.includes("secondary") || id.includes("kamambe")) {
+      return <Award className="w-5 h-5" />;
+    }
+    if (lvl.includes("technical") || id.includes("giheke") || lvl.includes("a2")) {
+      return <Code className="w-5 h-5" />;
+    }
+    return <GraduationCap className="w-5 h-5" />;
+  };
+
   const getSectionLabel = (sec: string) => {
     switch (sec) {
       case "about": return t.navAbout;
@@ -1218,6 +1475,7 @@ export default function App() {
                       { id: "project", label: "Add Project Integration", desc: "Introduce a system blueprint logs node", icon: <LayoutGrid className="w-4 h-4" /> },
                       { id: "skill", label: "Add Skill Specialty", desc: "Update expertise proficiency registers", icon: <Cpu className="w-4 h-4" /> },
                       { id: "gallery", label: "Manage Photo Gallery", desc: "Upload custom photos from your desktop", icon: <Camera className="w-4 h-4" /> },
+                      { id: "school", label: "Manage Schools & Education", desc: "Add or edit academic trajectory matrix items", icon: <GraduationCap className="w-4 h-4" /> },
                       { id: "chats", label: "Live Visitor Chats", desc: "Real-time chats list and AI suggestion copilot", icon: <MessageSquare className="w-4 h-4" /> },
                       { id: "records", label: "Manage Active Clusters", desc: "View core matrix listings & drop node records", icon: <Activity className="w-4 h-4" /> }
                     ].map((item) => (
@@ -1591,36 +1849,84 @@ export default function App() {
                         </div>
 
                         {/* File upload drag/drop zone */}
-                        <div className="space-y-2">
+                        <div className="space-y-4">
                           <span className="text-[9px] font-mono text-neutral-400 uppercase tracking-widest block font-bold">Select Photo Asset from Desktop</span>
-                          <div className="relative border-2 border-dashed border-neutral-900 hover:border-orange-500/40 rounded-2xl p-6 bg-neutral-950/60 transition-colors flex flex-col items-center justify-center text-center">
-                            {newGalleryImage ? (
-                              <div className="space-y-4">
-                                <div className="w-56 h-36 mx-auto rounded-xl overflow-hidden border border-neutral-900 relative">
-                                  <img src={newGalleryImage} alt="Gallery item upload preview" className="w-full h-full object-cover" />
+                          
+                          {newGalleryImages.length > 0 ? (
+                            <div className="space-y-4 w-full text-left">
+                              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 p-4 bg-neutral-950 border border-neutral-900 rounded-2xl max-h-[300px] overflow-y-auto">
+                                {newGalleryImages.map((src, index) => (
+                                  <div key={index} className="group relative rounded-xl overflow-hidden border border-neutral-850 aspect-square bg-neutral-900 flex items-center justify-center shadow-lg">
+                                    <img src={src} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110" alt={`Preview ${index + 1}`} referrerPolicy="no-referrer" />
+                                    <div className="absolute inset-0 bg-neutral-950/70 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const updated = newGalleryImages.filter((_, i) => i !== index);
+                                          setNewGalleryImages(updated);
+                                          if (updated.length > 0) {
+                                            setNewGalleryImage(updated[0]);
+                                          } else {
+                                            setNewGalleryImage("");
+                                          }
+                                        }}
+                                        className="p-1.5 bg-neutral-950 hover:bg-neutral-900 border border-neutral-850 rounded-lg text-red-500 hover:text-red-400 transition-colors shadow-md cursor-pointer"
+                                        title="Remove Photo Node"
+                                      >
+                                        <X className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                    <span className="absolute bottom-2 left-2 bg-neutral-950/80 backdrop-blur-md px-2 py-0.5 rounded text-[8px] font-mono font-bold text-orange-400 border border-neutral-800">
+                                      Photo {index + 1}
+                                    </span>
+                                  </div>
+                                ))}
+                                
+                                {/* Inner add-more zone */}
+                                <div className="relative rounded-xl border border-dashed border-neutral-800 hover:border-orange-500/30 flex flex-col items-center justify-center p-3 text-center aspect-square bg-neutral-950 hover:bg-neutral-950/50 transition-all cursor-pointer">
+                                  <Plus className="w-5 h-5 text-neutral-500" />
+                                  <span className="text-[8.5px] font-mono text-neutral-400 mt-1 block">Add More</span>
+                                  <input
+                                    type="file"
+                                    multiple
+                                    accept="image/*"
+                                    onChange={handleGalleryImageChange}
+                                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                                  />
                                 </div>
+                              </div>
+                              
+                              <div className="flex items-center justify-between text-[11px]">
+                                <span className="font-mono text-neutral-400 flex items-center gap-1.5">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                                  <span>{newGalleryImages.length} cropped node(s) staged sequentially</span>
+                                </span>
                                 <button
                                   type="button"
-                                  onClick={() => setNewGalleryImage("")}
-                                  className="px-3 py-1.5 bg-neutral-900 hover:bg-neutral-800 text-[10px] font-mono text-red-500 hover:text-red-400 border border-neutral-850 rounded-lg transition-colors cursor-pointer"
+                                  onClick={() => {
+                                    setNewGalleryImages([]);
+                                    setNewGalleryImage("");
+                                  }}
+                                  className="px-3 py-1 bg-neutral-950 hover:bg-neutral-900 text-[10px] font-mono text-red-500 hover:text-red-400 border border-neutral-900 rounded-lg transition-colors cursor-pointer"
                                 >
-                                  Remove Selected Image
+                                  Clear All Cropped
                                 </button>
                               </div>
-                            ) : (
-                              <>
-                                <Upload className="w-8 h-8 text-neutral-700 mb-2" />
-                                <span className="text-xs text-neutral-300 font-mono block font-medium">Drag-and-drop or Browse desktop files</span>
-                                <span className="text-[10px] text-neutral-500 font-mono block mt-1">JPEG, PNG, or GIF up to 2MB</span>
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  onChange={handleGalleryImageChange}
-                                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                                />
-                              </>
-                            )}
-                          </div>
+                            </div>
+                          ) : (
+                            <div className="relative border-2 border-dashed border-neutral-900 hover:border-orange-500/40 rounded-2xl p-6 bg-neutral-950/60 transition-colors flex flex-col items-center justify-center text-center">
+                              <Upload className="w-8 h-8 text-neutral-700 mb-2" />
+                              <span className="text-xs text-neutral-300 font-mono block font-medium">Drag-and-drop or Browse desktop files</span>
+                              <span className="text-[10px] text-neutral-500 font-mono block mt-1">Supports multi-selection & queue cropping</span>
+                              <input
+                                type="file"
+                                multiple
+                                accept="image/*"
+                                onChange={handleGalleryImageChange}
+                                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                              />
+                            </div>
+                          )}
                         </div>
 
                         <div className="flex flex-wrap gap-4">
@@ -1708,6 +2014,175 @@ export default function App() {
                             ))}
                           </div>
                         )}
+                      </div>
+                    </div>
+                  )}
+
+                  {adminActiveTab === "school" && (
+                    <div className="bg-neutral-900/10 border border-neutral-900/40 p-6 rounded-2xl space-y-6 animate-fade-in text-left">
+                      <div className="border-b border-neutral-900/50 pb-4">
+                        <h3 className="text-neutral-100 font-mono text-xs uppercase tracking-widest font-bold flex items-center gap-2">
+                          <GraduationCap className="w-4 h-4 text-orange-500" />
+                          <span>{editingSchoolId ? "Calibrate Educational Node" : "Publish Educational Node"}</span>
+                        </h3>
+                        <p className="text-[11px] font-mono text-neutral-500 mt-1">
+                          Configure curriculum parameters, graduation milestones, distinctions, and technical competencies accumulated on your Rwanda academic trajectory timeline.
+                        </p>
+                      </div>
+
+                      <form onSubmit={handleAddSchool} className="space-y-6">
+                        <div className="grid md:grid-cols-2 gap-6">
+                          <div className="space-y-2">
+                            <label className="text-[9px] font-mono text-neutral-400 uppercase tracking-widest block font-bold">School Name *</label>
+                            <input
+                              type="text"
+                              required
+                              value={newSchoolName}
+                              onChange={(e) => setNewSchoolName(e.target.value)}
+                              placeholder="E.g., IPRC NYANZA"
+                              className="w-full bg-neutral-950/60 border border-neutral-900 focus:border-orange-500/50 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none transition-all font-mono uppercase"
+                            />
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="text-[9px] font-mono text-neutral-400 uppercase tracking-widest block font-bold">Education Level *</label>
+                            <input
+                              type="text"
+                              required
+                              value={newSchoolLevel}
+                              onChange={(e) => setNewSchoolLevel(e.target.value)}
+                              placeholder="E.g., Higher Education A1 & A0"
+                              className="w-full bg-neutral-950/60 border border-neutral-900 focus:border-orange-500/50 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none transition-all font-mono"
+                            />
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="text-[9px] font-mono text-neutral-400 uppercase tracking-widest block font-bold">Trajectory Tag / Subtitle *</label>
+                            <input
+                              type="text"
+                              required
+                              value={newSchoolTag}
+                              onChange={(e) => setNewSchoolTag(e.target.value)}
+                              placeholder="E.g., Full-Stack System Engineering"
+                              className="w-full bg-neutral-950/60 border border-neutral-900 focus:border-orange-500/50 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none transition-all font-mono"
+                            />
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="text-[9px] font-mono text-neutral-400 uppercase tracking-widest block font-bold">Duration *</label>
+                            <input
+                              type="text"
+                              required
+                              value={newSchoolDuration}
+                              onChange={(e) => setNewSchoolDuration(e.target.value)}
+                              placeholder="E.g., 2021 - 2024"
+                              className="w-full bg-neutral-950/60 border border-neutral-900 focus:border-orange-500/50 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none transition-all font-mono"
+                            />
+                          </div>
+
+                          <div className="space-y-2 md:col-span-2">
+                            <label className="text-[9px] font-mono text-neutral-400 uppercase tracking-widest block font-bold">Academic Distinction / Honors</label>
+                            <input
+                              type="text"
+                              value={newSchoolDistinction}
+                              onChange={(e) => setNewSchoolDistinction(e.target.value)}
+                              placeholder="E.g., Engineering Excellence Lead Candidate"
+                              className="w-full bg-neutral-950/60 border border-neutral-900 focus:border-orange-500/50 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none transition-all font-mono"
+                            />
+                          </div>
+
+                          <div className="space-y-2 md:col-span-2">
+                            <label className="text-[9px] font-mono text-neutral-400 uppercase tracking-widest block font-bold">Skill Competencies / Highlights (Comma-Separated)</label>
+                            <input
+                              type="text"
+                              value={newSchoolHighlights}
+                              onChange={(e) => setNewSchoolHighlights(e.target.value)}
+                              placeholder="E.g., Advanced Software Eng, TCP/IP Routing, DBMS Foundations"
+                              className="w-full bg-neutral-950/60 border border-neutral-900 focus:border-orange-500/50 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none transition-all font-mono"
+                            />
+                          </div>
+
+                          <div className="space-y-2 md:col-span-2">
+                            <label className="text-[9px] font-mono text-neutral-400 uppercase tracking-widest block font-bold">English Description *</label>
+                            <textarea
+                              required
+                              rows={3}
+                              value={newSchoolDesc}
+                              onChange={(e) => setNewSchoolDesc(e.target.value)}
+                              placeholder="Acquired elite software architecture skills..."
+                              className="w-full bg-neutral-950/60 border border-neutral-900 focus:border-orange-500/50 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-605 focus:outline-none transition-all font-mono leading-relaxed"
+                            />
+                          </div>
+
+                          <div className="space-y-2 md:col-span-2">
+                            <label className="text-[9px] font-mono text-neutral-400 uppercase tracking-widest block font-bold">Kinyarwanda Description (Optional)</label>
+                            <textarea
+                              rows={3}
+                              value={newSchoolDescRw}
+                              onChange={(e) => setNewSchoolDescRw(e.target.value)}
+                              placeholder="Hano hiciwe ubumenyi bwo gukora porogaramu zikomye..."
+                              className="w-full bg-neutral-950/60 border border-neutral-900 focus:border-orange-500/50 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-605 focus:outline-none transition-all font-mono leading-relaxed"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex gap-4">
+                          <button
+                            type="submit"
+                            className="py-3 px-6 bg-orange-500 cursor-pointer text-white font-mono text-xs uppercase tracking-widest hover:bg-orange-600 rounded-xl transition-all shadow-[0_0_15px_rgba(249,115,22,0.15)] flex items-center gap-1.5 font-bold"
+                          >
+                            <Plus className="w-4 h-4" />
+                            <span>{editingSchoolId ? "Re-Calibrate System Node" : "Publish Trajectory Node"}</span>
+                          </button>
+
+                          {editingSchoolId && (
+                            <button
+                              type="button"
+                              onClick={handleCancelEditSchool}
+                              className="py-3 px-6 bg-neutral-905 hover:bg-neutral-850 cursor-pointer border border-neutral-800 text-neutral-400 font-mono text-xs uppercase tracking-widest rounded-xl transition-all font-bold"
+                            >
+                              Cancel Edit
+                            </button>
+                          )}
+                        </div>
+                      </form>
+
+                      {/* Timeline overview lists with delete & edit option triggers */}
+                      <div className="space-y-3 pt-6 border-t border-neutral-900/60">
+                        <label className="text-[9px] font-mono text-neutral-500 uppercase tracking-widest block font-bold">Active Academic Timeline Configurations ({schools.length})</label>
+                        <div className="grid md:grid-cols-2 gap-4">
+                          {schools.map((item) => (
+                            <div key={item.id} className="p-4 rounded-xl border border-neutral-905 bg-neutral-950/70 relative group/item flex flex-col justify-between">
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[9px] font-mono text-orange-500 font-bold uppercase">{item.level}</span>
+                                  <span className="text-[9px] font-mono text-neutral-500">{item.duration}</span>
+                                </div>
+                                <h4 className="text-sm font-sans font-extrabold text-neutral-100">{item.name}</h4>
+                                <p className="text-[10px] text-neutral-400 leading-relaxed max-w-md line-clamp-2 font-mono">
+                                  {item.desc}
+                                </p>
+                              </div>
+
+                              <div className="flex gap-2 mt-4 pt-3 border-t border-neutral-900">
+                                <button
+                                  type="button"
+                                  onClick={() => handleEditSchoolInit(item.id)}
+                                  className="py-2 px-3 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/15 rounded-lg transition-all font-mono text-[9px] uppercase font-bold tracking-wider cursor-pointer"
+                                >
+                                  Edit Node
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteSchool(item.id)}
+                                  className="py-2 px-3 bg-neutral-950 hover:bg-red-500/10 hover:text-red-400 border border-neutral-900 hover:border-red-500/25 rounded-lg transition-all font-mono text-[9px] uppercase font-bold tracking-wider cursor-pointer"
+                                >
+                                  Delete Node
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   )}
@@ -2784,60 +3259,7 @@ export default function App() {
 
           {/* Grid of Cards */}
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-            {[
-              {
-                id: "eden",
-                level: "Primary Education",
-                name: "EDEN SCHOOL",
-                tag: "Logical Foundations",
-                duration: "2009 - 2014",
-                distinction: "Distinction in Mathematics",
-                highlights: ["Analytical Mindset", "Math & Logic", "Problem Solving"],
-                icon: <BookOpen className="w-5 h-5" />,
-                desc: language === "en" 
-                  ? "Cultivated foundational logical thinking, mathematical proficiency, and structured analysis. Established the mathematical baseline for high-grade computational design and engineering architectures." 
-                  : "Urufatiro rwo kubara, gusesengura no gutekereza neza mu buryo bwa gihanga. Aha ni ho hantu hashyizwe urufatiro rw'imibare rufasha mu gushushanya na porogaramu za mudasobwa zigezweho."
-              },
-              {
-                id: "kamambe",
-                level: "Secondary O-Level",
-                name: "KAMAMBE",
-                tag: "Scientific Methodology",
-                duration: "2015 - 2017",
-                distinction: "Top Tier Physics Club Lead",
-                highlights: ["Natural Sciences", "Systematic Logic", "Team Collaboration"],
-                icon: <Award className="w-5 h-5" />,
-                desc: language === "en" 
-                  ? "Engaged in scientific methodologies comprising biology, mathematics, and complex physics patterns. Built exceptional communication protocols and collaborative logic models." 
-                  : "Hano hiciwe ubumenyi bw'ibanze mu mibare n'ubugenge (Sciences). Twahoraga twitoza gukorera mu matsinda no gukemura ibibazo biteye amatsiko mu buryo bufatika."
-              },
-              {
-                id: "giheke",
-                level: "A2 Secondary",
-                name: "GIHEKE TSS",
-                tag: "Technical Instruction Node",
-                duration: "2018 - 2020",
-                distinction: "Software Systems Gold Medalist",
-                highlights: ["Software Dev", "IP Routing", "DBMS Foundations"],
-                icon: <Code className="w-5 h-5" />,
-                desc: language === "en" 
-                  ? "Rigorous hands-on immersion in software application development, TCP/IP network infrastructures, database engines, and logical configuration management. Graduated top-of-class with professional system software designs." 
-                  : "Isomo rishyira mu bikorwa ryo gukora porogaramu, gushyiraho imiyoboro y'itumanaho (Networks), no kubaka amadashibodi y'amakuru. Twarangije ku isonga dufite ubumenyi bwo kubaka porogaramu."
-              },
-              {
-                id: "nyanza",
-                level: "Higher Education A1 & A0",
-                name: "IPRC NYANZA",
-                tag: "Full-Stack System Engineering",
-                duration: "2021 - 2024",
-                distinction: "Engineering Excellence Lead Candidate",
-                highlights: ["Advanced Software Eng", "System Architecture", "Telemetry APIs"],
-                icon: <GraduationCap className="w-5 h-5" />,
-                desc: language === "en" 
-                  ? "Acquired elite theoretical and practical expertise (A1 & A0 credentials) covering advanced algorithms, cloud microservices, architectural patterns, relational database optimization, and high-performance server routines." 
-                  : "Amashuri makuru na kaminuza mu gukora porogaramu zikomye (Software Engineering), amategeko arinda urubuga, kubaka za API zihuta no gusesengura mudasobwa mu buryo buhanitse (A1 & A0)."
-              }
-            ].map((school) => {
+            {schools.map((school) => {
               const isSelected = selectedSchoolNode === school.id;
               return (
                 <motion.div
@@ -2871,7 +3293,7 @@ export default function App() {
                           ? "bg-orange-500 text-neutral-950 scale-110" 
                           : "bg-neutral-950 text-orange-500 group-hover:bg-orange-500/20 group-hover:text-orange-400"
                       }`}>
-                        {school.icon}
+                        {renderSchoolIcon(school)}
                       </div>
                       <div>
                         <h3 className="font-sans font-bold text-base text-neutral-100 tracking-tight leading-none group-hover:text-orange-500 transition-colors">
@@ -2884,7 +3306,7 @@ export default function App() {
                     </div>
 
                     <p className="text-[11.5px] text-neutral-400 leading-relaxed font-sans font-light">
-                      {school.desc}
+                      {language === "en" ? school.desc : (school.descRw || school.desc)}
                     </p>
                   </div>
 
@@ -2916,30 +3338,28 @@ export default function App() {
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mt-2">
               <div className="space-y-1">
                 <p className="text-neutral-400 font-sans">
-                  {selectedSchoolNode === "eden" && (
-                    <span>ACTIVE INSPECTION: <strong className="text-orange-500">EDEN SCHOOL Primary Curriculum</strong>. Foundational math and early science nodes compiled perfectly. Academic register verified.</span>
-                  )}
-                  {selectedSchoolNode === "kamambe" && (
-                    <span>ACTIVE INSPECTION: <strong className="text-orange-500">KAMAMBE Secondary O-Level Instruction</strong>. Strong mathematical baseline, science modeling, and systemic analytical proficiency established.</span>
-                  )}
-                  {selectedSchoolNode === "giheke" && (
-                    <span>ACTIVE INSPECTION: <strong className="text-orange-500">GIHEKE TSS Software A2 System</strong>. Hands-on network node layouts, routing topologies, relational data engines, and algorithmic design matrices. Certified Software Specialist.</span>
-                  )}
-                  {selectedSchoolNode === "nyanza" && (
-                    <span>ACTIVE INSPECTION: <strong className="text-orange-500">IPRC NYANZA High-Grade Software Engineering A1 & A0</strong>. Advance database operations, distributed microservices, state engine caching pipelines, and secure networking architectures. Professional engineer verified.</span>
-                  )}
+                  {(() => {
+                    const activeSchool = schools.find(s => s.id === selectedSchoolNode);
+                    if (activeSchool) {
+                      const descText = language === "en" ? activeSchool.desc : (activeSchool.descRw || activeSchool.desc);
+                      return (
+                        <span>
+                          ACTIVE INSPECTION: <strong className="text-orange-500">{activeSchool.name} {activeSchool.level}</strong>. {descText}
+                        </span>
+                      );
+                    }
+                    return <span>Select an academic trajectory node above to load verified telemetry parameters.</span>;
+                  })()}
                 </p>
                 <div className="flex items-center gap-3 mt-1.5 text-[10px] text-neutral-500 font-mono flex-wrap">
                   <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /> STATUS: DEPLOYED</span>
                   <span>&bull;</span>
                   <span>ACADEMIC KEY: {selectedSchoolNode?.toUpperCase()}-NODE-TJB-2026</span>
                   <span>&bull;</span>
-                  <span className="text-orange-500/80">HONORS: {
-                    selectedSchoolNode === "eden" ? "Distinction in Mathematics" :
-                    selectedSchoolNode === "kamambe" ? "Top Tier Physics Club Lead" :
-                    selectedSchoolNode === "giheke" ? "Software Systems Gold Medalist" :
-                    "Engineering Excellence Lead Candidate"
-                  }</span>
+                  <span className="text-orange-500/80">HONORS: {(() => {
+                    const activeSchool = schools.find(s => s.id === selectedSchoolNode);
+                    return activeSchool ? (activeSchool.distinction || "Academic Distinction Verified") : "N/A";
+                  })()}</span>
                 </div>
               </div>
               <div className="shrink-0 flex items-center bg-neutral-900/90 border border-neutral-850 rounded-xl px-4 py-2.5 text-[10px] text-orange-450 font-mono font-bold uppercase tracking-widest shadow-inner self-stretch md:self-auto justify-center">
@@ -4250,6 +4670,8 @@ export default function App() {
                         { id: "project", label: "Add Project", icon: <LayoutGrid className="w-3.5 h-3.5" /> },
                         { id: "skill", label: "Add Skill Specialty", icon: <Cpu className="w-3.5 h-3.5" /> },
                         { id: "gallery", label: "Manage Gallery", icon: <Camera className="w-3.5 h-3.5" /> },
+                        { id: "school", label: "Manage Schools", icon: <GraduationCap className="w-3.5 h-3.5" /> },
+                        { id: "chats", label: "Live Visitor Chats", icon: <MessageSquare className="w-3.5 h-3.5" /> },
                         { id: "records", label: "Nodes Datastore Config", icon: <Activity className="w-3.5 h-3.5" /> }
                       ].map((item) => (
                         <button
@@ -4588,36 +5010,83 @@ export default function App() {
                           </div>
 
                           {/* File upload drag/drop zone */}
-                          <div className="space-y-2">
-                            <span className="text-[9px] font-mono text-neutral-400 uppercase tracking-widest block font-bold">Select Photo Asset from Desktop</span>
-                            <div className="relative border-2 border-dashed border-neutral-850 hover:border-orange-500/40 rounded-2xl p-5 bg-neutral-900 transition-colors flex flex-col items-center justify-center text-center">
-                              {newGalleryImage ? (
-                                <div className="space-y-3">
-                                  <div className="w-40 h-28 mx-auto rounded-xl overflow-hidden border border-neutral-800 relative">
-                                    <img src={newGalleryImage} alt="Gallery item upload preview" className="w-full h-full object-cover" />
+                          <div className="space-y-3">
+                            <span className="text-[9px] font-mono text-neutral-400 uppercase tracking-widest block font-bold">Select Photo Assets (Supports Multiple Uploads)</span>
+                            
+                            {newGalleryImages.length > 0 ? (
+                              <div className="space-y-3 w-full text-left">
+                                <div className="grid grid-cols-2 gap-3 p-3 bg-neutral-950 border border-neutral-900 rounded-xl max-h-[220px] overflow-y-auto">
+                                  {newGalleryImages.map((src, index) => (
+                                    <div key={index} className="group relative rounded-lg overflow-hidden border border-neutral-850 aspect-square bg-neutral-900 flex items-center justify-center shadow">
+                                      <img src={src} className="w-full h-full object-cover" alt={`Preview ${index + 1}`} referrerPolicy="no-referrer" />
+                                      <div className="absolute inset-0 bg-neutral-950/70 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const updated = newGalleryImages.filter((_, i) => i !== index);
+                                            setNewGalleryImages(updated);
+                                            if (updated.length > 0) {
+                                              setNewGalleryImage(updated[0]);
+                                            } else {
+                                              setNewGalleryImage("");
+                                            }
+                                          }}
+                                          className="p-1 bg-neutral-950 hover:bg-neutral-900 border border-neutral-850 rounded text-red-500 hover:text-red-400 cursor-pointer"
+                                        >
+                                          <X className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                      <span className="absolute bottom-1.5 left-1.5 bg-neutral-950/80 px-1.5 py-0.5 rounded text-[7px] font-mono font-bold text-orange-400">
+                                        #{index + 1}
+                                      </span>
+                                    </div>
+                                  ))}
+                                  
+                                  {/* Inner add-more for mobile */}
+                                  <div className="relative rounded-lg border border-dashed border-neutral-850 hover:border-orange-500/30 flex flex-col items-center justify-center p-2 text-center aspect-square bg-neutral-950 transition-all cursor-pointer">
+                                    <Plus className="w-4 h-4 text-neutral-500" />
+                                    <span className="text-[8px] font-mono text-neutral-400 mt-1">Add</span>
+                                    <input
+                                      type="file"
+                                      multiple
+                                      accept="image/*"
+                                      onChange={handleGalleryImageChange}
+                                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                                    />
                                   </div>
+                                </div>
+                                
+                                <div className="flex items-center justify-between text-[10px]">
+                                  <span className="font-mono text-neutral-400 flex items-center gap-1">
+                                    <span className="w-1 h-1 rounded-full bg-green-500 animate-pulse" />
+                                    <span>{newGalleryImages.length} node(s) staged</span>
+                                  </span>
                                   <button
                                     type="button"
-                                    onClick={() => setNewGalleryImage("")}
-                                    className="px-2.5 py-1 bg-neutral-950 hover:bg-neutral-900 text-[10px] font-mono text-red-500 hover:text-red-400 border border-neutral-850 rounded-lg transition-colors cursor-pointer"
+                                    onClick={() => {
+                                      setNewGalleryImages([]);
+                                      setNewGalleryImage("");
+                                    }}
+                                    className="px-2 py-1 bg-neutral-950 text-[9px] font-mono text-red-500 rounded border border-neutral-850 cursor-pointer"
                                   >
-                                    Remove Image
+                                    Clear
                                   </button>
                                 </div>
-                              ) : (
-                                <>
-                                  <Upload className="w-6 h-6 text-neutral-600 mb-1.5" />
-                                  <span className="text-xs text-neutral-300 font-mono block font-medium">Browse desktop files</span>
-                                  <span className="text-[9px] text-neutral-550 font-mono block mt-0.5">JPEG/PNG up to 2MB</span>
-                                  <input
-                                    type="file"
-                                    accept="image/*"
-                                    onChange={handleGalleryImageChange}
-                                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                                  />
-                                </>
-                              )}
-                            </div>
+                              </div>
+                            ) : (
+                              <div className="relative border-2 border-dashed border-neutral-850 hover:border-orange-500/40 rounded-2xl p-5 bg-neutral-900 transition-colors flex flex-col items-center justify-center text-center">
+                                <Upload className="w-6 h-6 text-neutral-600 mb-1.5" />
+                                <span className="text-xs text-neutral-300 font-mono block font-medium">Browse desktop files</span>
+                                <span className="text-[9px] text-neutral-550 font-mono block mt-0.5">JPEG/PNG, supports multiple uploads</span>
+                                <input
+                                  type="file"
+                                  multiple
+                                  accept="image/*"
+                                  onChange={handleGalleryImageChange}
+                                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                                />
+                              </div>
+                            )}
                           </div>
 
                           <div className="flex flex-wrap gap-4">
@@ -4705,6 +5174,175 @@ export default function App() {
                               ))}
                             </div>
                           )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* TAB CONTENT: MANAGE SCHOOLS */}
+                    {adminActiveTab === "school" && (
+                      <div className="space-y-6 animate-fade-in text-left">
+                        <div className="border-b border-neutral-905 pb-3">
+                          <h3 className="text-neutral-100 font-mono text-[11px] uppercase tracking-widest font-bold">
+                            {editingSchoolId ? "Calibrate Educational Node" : "Publish Educational Node"}
+                          </h3>
+                        </div>
+
+                        <form onSubmit={handleAddSchool} className="space-y-4">
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-mono text-neutral-400 uppercase block font-semibold">School Name *</label>
+                            <input
+                              type="text"
+                              required
+                              value={newSchoolName}
+                              onChange={(e) => setNewSchoolName(e.target.value)}
+                              placeholder="E.g., IPRC NYANZA"
+                              className="w-full bg-neutral-900 border border-neutral-850 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none transition-all font-mono uppercase"
+                            />
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-mono text-neutral-400 uppercase block font-semibold">Education Level *</label>
+                            <input
+                              type="text"
+                              required
+                              value={newSchoolLevel}
+                              onChange={(e) => setNewSchoolLevel(e.target.value)}
+                              placeholder="E.g., Higher Education A1 & A0"
+                              className="w-full bg-neutral-900 border border-neutral-850 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none transition-all font-mono"
+                            />
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-mono text-neutral-400 uppercase block font-semibold">Trajectory Tag *</label>
+                            <input
+                              type="text"
+                              required
+                              value={newSchoolTag}
+                              onChange={(e) => setNewSchoolTag(e.target.value)}
+                              placeholder="E.g., Full-Stack System Engineering"
+                              className="w-full bg-neutral-900 border border-neutral-850 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none transition-all font-mono"
+                            />
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-mono text-neutral-400 uppercase block font-semibold">Duration *</label>
+                            <input
+                              type="text"
+                              required
+                              value={newSchoolDuration}
+                              onChange={(e) => setNewSchoolDuration(e.target.value)}
+                              placeholder="E.g., 2021 - 2024"
+                              className="w-full bg-neutral-900 border border-neutral-850 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none transition-all font-mono"
+                            />
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-mono text-neutral-400 uppercase block font-semibold">Academic Distinction / Honors</label>
+                            <input
+                              type="text"
+                              value={newSchoolDistinction}
+                              onChange={(e) => setNewSchoolDistinction(e.target.value)}
+                              placeholder="E.g., Engineering Excellence Lead Candidate"
+                              className="w-full bg-neutral-900 border border-neutral-850 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none transition-all font-mono"
+                            />
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-mono text-neutral-400 uppercase block font-semibold">Highlights (Comma-Separated)</label>
+                            <input
+                              type="text"
+                              value={newSchoolHighlights}
+                              onChange={(e) => setNewSchoolHighlights(e.target.value)}
+                              placeholder="E.g., Advanced Software Eng, TCP/IP Routing"
+                              className="w-full bg-neutral-900 border border-neutral-850 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none transition-all font-mono"
+                            />
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-mono text-neutral-400 uppercase block font-semibold">English Description *</label>
+                            <textarea
+                              required
+                              rows={3}
+                              value={newSchoolDesc}
+                              onChange={(e) => setNewSchoolDesc(e.target.value)}
+                              placeholder="Acquired elite software architecture skills..."
+                              className="w-full bg-neutral-900 border border-neutral-850 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none transition-all font-mono"
+                            />
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-mono text-neutral-400 uppercase block font-semibold">Kinyarwanda Description (Optional)</label>
+                            <textarea
+                              rows={3}
+                              value={newSchoolDescRw}
+                              onChange={(e) => setNewSchoolDescRw(e.target.value)}
+                              placeholder="Hano hiciwe ubumenyi bwo gukora porogaramu zikomye..."
+                              className="w-full bg-neutral-900 border border-neutral-850 rounded-xl px-4 py-3 text-xs text-neutral-200 placeholder-neutral-600 focus:outline-none transition-all font-mono"
+                            />
+                          </div>
+
+                          <div className="flex gap-4 pt-2">
+                            <button
+                              type="submit"
+                              className="py-3 px-5 bg-orange-500 text-white font-mono text-[10px] uppercase tracking-wider hover:bg-orange-600 rounded-xl transition-all font-bold cursor-pointer"
+                            >
+                              {editingSchoolId ? "Update Node" : "Publish Trajectory Node"}
+                            </button>
+                            {editingSchoolId && (
+                              <button
+                                type="button"
+                                onClick={handleCancelEditSchool}
+                                className="py-3 px-5 bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-400 font-mono text-[10px] uppercase tracking-wider rounded-xl transition-all font-bold cursor-pointer"
+                              >
+                                Cancel
+                              </button>
+                            )}
+                          </div>
+                        </form>
+
+                        {/* Mobile Lists overview with Delete and edit options */}
+                        <div className="space-y-3 pt-6 border-t border-neutral-900">
+                          <label className="text-[10px] font-mono text-neutral-500 uppercase tracking-widest block font-semibold">Active Academic Timeline Nodes ({schools.length})</label>
+                          <div className="space-y-3">
+                            {schools.map((item) => (
+                              <div key={item.id} className="p-4 rounded-xl border border-neutral-850 bg-neutral-950/70 space-y-2 text-left">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[9px] font-mono text-orange-500 font-bold uppercase">{item.level}</span>
+                                  <span className="text-[9px] font-mono text-neutral-500">{item.duration}</span>
+                                </div>
+                                <h4 className="text-xs font-bold text-neutral-200">{item.name}</h4>
+                                <div className="flex gap-2 pt-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleEditSchoolInit(item.id)}
+                                    className="py-1.5 px-3 bg-orange-500/10 text-orange-400 border border-orange-500/15 rounded-lg transition-all font-mono text-[9px] uppercase font-bold tracking-wider"
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteSchool(item.id)}
+                                    className="py-1.5 px-3 bg-neutral-900 hover:bg-red-500/10 text-neutral-400 hover:text-red-400 border border-neutral-850 hover:border-red-500/20 rounded-lg transition-all font-mono text-[9px] uppercase font-bold tracking-wider"
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {adminActiveTab === "chats" && (
+                      <div className="space-y-6 animate-fade-in text-left">
+                        <div className="border-b border-neutral-905 pb-3">
+                          <h3 className="text-neutral-100 font-mono text-[11px] uppercase tracking-widest font-bold">
+                            Live Visitor Chats
+                          </h3>
+                        </div>
+                        <div className="p-4 border border-neutral-900 rounded-xl bg-neutral-950/40 text-center text-neutral-600 font-mono text-xs">
+                          {adminChatSessions.length === 0 ? "No active chat sessions." : `There are ${adminChatSessions.length} active sessions. Please manage them on a desktop computer for optimal calibration controls.`}
                         </div>
                       </div>
                     )}
@@ -4852,6 +5490,15 @@ export default function App() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Image Cropper Modal Layer */}
+      <ImageCropperModal
+        isOpen={cropperOpen}
+        src={cropperSrc}
+        onClose={handleCropperCancel}
+        onCropComplete={handleCropperComplete}
+        aspectPreset={cropperAspect}
+      />
 
       {/* Floating Scroll back to top shortcut tool */}
       <button
