@@ -34,6 +34,7 @@ export interface FamilyMember {
 export interface TranslationSet {
   navAbout: string;
   navExpertise: string;
+  navSchool: string;
   navProjects: string;
   navFamily: string;
   navServices: string;
@@ -99,6 +100,7 @@ export const TRANSLATIONS: Record<"en" | "rw", TranslationSet> = {
   en: {
     navAbout: "About",
     navExpertise: "Expertise",
+    navSchool: "My School",
     navProjects: "Projects",
     navFamily: "Family",
     navServices: "Services",
@@ -224,6 +226,7 @@ export const TRANSLATIONS: Record<"en" | "rw", TranslationSet> = {
   rw: {
     navAbout: "Ibyerekeye",
     navExpertise: "Ubumenyi",
+    navSchool: "Amashuri",
     navProjects: "Imishinga",
     navFamily: "Umuryango",
     navServices: "Serivisi",

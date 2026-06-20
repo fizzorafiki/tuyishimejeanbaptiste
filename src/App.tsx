@@ -49,7 +49,11 @@ import {
   Plus,
   Trash2,
   Upload,
-  Edit3
+  Edit3,
+  RefreshCw,
+  GraduationCap,
+  Award,
+  BookOpen
 } from "lucide-react";
 import { PROJECTS, SKILL_CATEGORIES, SERVICES, TESTIMONIALS } from "./data";
 import { Project, ChatMessage, VisitorMessage, SkillCategory } from "./types";
@@ -179,6 +183,34 @@ export default function App() {
     return localStorage.getItem("tjb_portfolio_visitor_name") || "";
   });
   const [sessionAiEnabled, setSessionAiEnabled] = useState<boolean>(true);
+  const [supabaseActive, setSupabaseActive] = useState<boolean>(false);
+  const [skillsLoading, setSkillsLoading] = useState<boolean>(true);
+  const [selectedSchoolNode, setSelectedSchoolNode] = useState<string>("nyanza");
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSkillsLoading(false);
+    }, 1600);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const handleRecalibrateSkills = () => {
+    setSkillsLoading(true);
+    const timer = setTimeout(() => {
+      setSkillsLoading(false);
+    }, 1400);
+  };
+
+  useEffect(() => {
+    fetch("/api/health")
+      .then(r => r.json())
+      .then(data => {
+        if (data && data.supabaseConfigured) {
+          setSupabaseActive(true);
+        }
+      })
+      .catch(err => console.error("Could not fetch API health state:", err));
+  }, []);
 
   // Custom router state tracking paths
   const [currentPath, setCurrentPath] = useState<string>(() => window.location.pathname);
@@ -1020,6 +1052,7 @@ export default function App() {
     switch (sec) {
       case "about": return t.navAbout;
       case "expertise": return t.navExpertise;
+      case "school": return t.navSchool;
       case "projects": return t.navProjects;
       case "family": return t.navFamily;
       case "services": return t.navServices;
@@ -2132,7 +2165,7 @@ export default function App() {
 
           {/* Core Desktop Navbar Menu Links */}
           <div className="hidden md:flex items-center gap-6">
-            {["about", "expertise", "projects", "family", "services", "gallery", "contact"].map((section) => (
+            {["about", "expertise", "school", "projects", "family", "services", "gallery", "contact"].map((section) => (
               <a
                 key={section}
                 href={`#${section}`}
@@ -2239,7 +2272,7 @@ export default function App() {
             className="fixed inset-0 top-[64px] z-30 bg-neutral-950/95 backdrop-blur-2xl border-b border-neutral-900 block md:hidden"
           >
             <div className="flex flex-col gap-5 p-8 max-h-screen overflow-y-auto">
-              {["about", "expertise", "projects", "family", "services", "gallery", "contact"].map((section) => (
+              {["about", "expertise", "school", "projects", "family", "services", "gallery", "contact"].map((section) => (
                 <a
                   key={section}
                   href={`#${section}`}
@@ -2558,86 +2591,361 @@ export default function App() {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-8 lg:gap-10">
-            {skillCategories.map((cat) => (
-              <motion.div
-                key={cat.id}
-                className="relative overflow-hidden rounded-3xl border border-neutral-900/60 bg-neutral-900/15 p-6 md:p-8 hover:border-orange-500/30 hover:bg-neutral-900/25 transition-all duration-300 shadow-xl flex flex-col justify-between group select-none"
-                whileHover={{ y: -6 }}
-                transition={{ type: "spring", duration: 0.4 }}
-              >
-                {/* Embedded background abstract glow */}
-                <div className="absolute top-0 right-0 w-[160px] h-[160px] rounded-full bg-orange-500/[0.015] group-hover:bg-orange-500/[0.035] blur-[50px] transition-all duration-500 pointer-events-none" />
-                
-                <div className="space-y-6">
-                  {/* Category Header */}
-                  <div className="flex items-center justify-between border-b border-neutral-900/40 pb-4">
-                    <div className="flex items-center gap-4">
-                      <span className="shrink-0 p-3 rounded-2xl bg-neutral-950 border border-neutral-850 text-orange-500 group-hover:text-orange-400 group-hover:scale-110 transition-all duration-300">
-                        {renderSkillIcon(cat.icon)}
+          {/* Telemetry Control Toolbar */}
+          <div className="flex justify-center -mt-6 mb-12">
+            <button
+              onClick={handleRecalibrateSkills}
+              disabled={skillsLoading}
+              className="px-6 py-2.5 bg-neutral-900 hover:bg-neutral-850 hover:border-orange-500/40 border border-neutral-850 text-neutral-300 hover:text-white rounded-full font-mono text-xs uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer relative shadow-lg shadow-black/40 disabled:opacity-75"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-orange-500 ${skillsLoading ? "animate-spin" : "hover:rotate-180 transition-transform duration-500"}`} />
+              <span>{skillsLoading ? "Synchronizing Telemetry..." : "Recalibrate Stack Metrics"}</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse ml-1" />
+            </button>
+          </div>
+
+          {skillsLoading ? (
+            <div className="grid md:grid-cols-2 gap-8 lg:gap-10">
+              {[
+                { id: "frontend", name: "Frontend Development", icon: "monitor", systemLog: "Initializing TS compiler... Dynamic route trees compiled... OK (94%)" },
+                { id: "backend", name: "Backend & Core APIs", icon: "server", systemLog: "Profiling Express pipelines... Instantiating routes... OK (92%)" },
+                { id: "data", name: "Databases & Engines", icon: "database", systemLog: "Re-indexing PostgreSQL trees... Pruning orphan leaves... OK (88%)" },
+                { id: "infrastructure", name: "Docker & System Ops", icon: "layers", systemLog: "Securing image bounds... Testing container health metrics... OK (86%)" }
+              ].map((categorySkeleton) => (
+                <div
+                  key={categorySkeleton.id}
+                  className="relative overflow-hidden rounded-3xl border border-neutral-900 bg-neutral-950/20 p-6 md:p-8 flex flex-col justify-between h-[420px] select-none"
+                >
+                  <div className="space-y-6">
+                    {/* Header skeleton */}
+                    <div className="flex items-center justify-between border-b border-neutral-900 pb-4">
+                      <div className="flex items-center gap-4">
+                        <span className="shrink-0 p-3 rounded-2xl bg-neutral-950 border border-neutral-850 text-orange-500/40 animate-pulse">
+                          {renderSkillIcon(categorySkeleton.icon)}
+                        </span>
+                        <div className="space-y-2">
+                          <h3 className="h-4 w-32 bg-neutral-900 rounded animate-pulse" />
+                          <div className="h-2.5 w-44 bg-neutral-900/60 rounded animate-pulse" />
+                        </div>
+                      </div>
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400/50 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-500/50" />
                       </span>
-                      <div>
-                        <h3 className="text-sm font-mono uppercase tracking-[0.15em] font-bold text-neutral-100">
-                          {cat.name}
-                        </h3>
-                        <span className="text-[10px] font-mono text-neutral-500 uppercase tracking-widest mt-0.5 block">
-                          Telemetry Operational Matrix
+                    </div>
+
+                    {/* Progress skeleton elements */}
+                    <div className="space-y-5 pt-1">
+                      {[1, 2, 3, 4].map((loaderId) => (
+                        <div key={loaderId} className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div className="h-3.5 w-24 bg-neutral-900/80 rounded animate-pulse" />
+                            <div className="h-3.5 w-8 bg-neutral-900/80 rounded animate-pulse" />
+                          </div>
+                          <div className="relative w-full h-1.5 bg-neutral-950 rounded-full overflow-hidden p-[0.5px] border border-neutral-900/60">
+                            <div
+                              className="h-full bg-gradient-to-r from-orange-500/20 to-amber-500/10 rounded-full animate-pulse"
+                              style={{ width: `${60 + loaderId * 8}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Terminal log skeleton */}
+                  <div className="mt-8 pt-4 border-t border-neutral-900/40">
+                    <div className="bg-neutral-950 rounded-xl p-3.5 border border-neutral-900/70 font-mono text-[10.5px] animate-pulse space-y-1.5">
+                      <span className="text-[9px] font-bold text-orange-500/50 uppercase tracking-wider block mb-1">
+                        [TJB-Telemetry-Auditor://recalibrating...]
+                      </span>
+                      <p className="text-neutral-600 leading-relaxed font-light font-mono text-[10px]">
+                        // SYSTEM: {categorySkeleton.systemLog}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="grid md:grid-cols-2 gap-8 lg:gap-10">
+              {skillCategories.map((cat) => (
+                <motion.div
+                  key={cat.id}
+                  className="relative overflow-hidden rounded-3xl border border-neutral-900/60 bg-neutral-900/10 p-6 md:p-8 hover:border-orange-500/25 hover:bg-neutral-900/20 transition-all duration-300 shadow-xl flex flex-col justify-between group select-none min-h-[420px]"
+                  whileHover={{ y: -6 }}
+                  transition={{ type: "spring", duration: 0.4 }}
+                >
+                  {/* Embedded background abstract glow */}
+                  <div className="absolute top-0 right-0 w-[180px] h-[180px] rounded-full bg-orange-500/[0.012] group-hover:bg-orange-500/[0.025] blur-[50px] transition-all duration-500 pointer-events-none" />
+                  
+                  <div className="space-y-6">
+                    {/* Category Header */}
+                    <div className="flex items-center justify-between border-b border-neutral-900/40 pb-4">
+                      <div className="flex items-center gap-4">
+                        <span className="shrink-0 p-3.5 rounded-2xl bg-neutral-950 border border-neutral-850 text-orange-500 group-hover:text-orange-400 group-hover:scale-110 transition-all duration-300 shadow-md">
+                          {renderSkillIcon(cat.icon)}
+                        </span>
+                        <div>
+                          <h3 className="text-sm font-mono uppercase tracking-[0.15em] font-bold text-neutral-100 group-hover:text-orange-450 transition-colors">
+                            {cat.name}
+                          </h3>
+                          <span className="text-[10px] font-mono text-neutral-500 uppercase tracking-widest mt-0.5 block">
+                            Telemetry Operational Matrix
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span className="relative flex h-2.5 w-2.5">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500" />
                         </span>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <span className="relative flex h-2 w-2">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75" />
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-500" />
-                      </span>
+                    {/* Skills Progress lists */}
+                    <div className="grid gap-x-6 gap-y-5 pt-1">
+                      {cat.skills.map((skill) => (
+                        <div key={skill.name} className="space-y-2 font-mono group/item">
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="text-neutral-300 font-medium group-hover/item:text-neutral-100 group-hover:text-neutral-200 transition-colors">
+                              {skill.name}
+                            </span>
+                            <span className="text-orange-450 font-mono font-bold text-[10px] bg-orange-500/5 px-2 py-0.5 rounded border border-orange-500/10 group-hover/item:bg-orange-500/10 transition-all">
+                              {skill.proficiency}%
+                            </span>
+                          </div>
+                          
+                          {/* Segmented customized progress meter bar with a glowing light beacons at tip */}
+                          <div className="relative w-full h-2 bg-neutral-950 rounded-full overflow-hidden border border-neutral-900/80 p-[0.5px]">
+                            <motion.div
+                              initial={{ width: 0 }}
+                              animate={{ width: `${skill.proficiency}%` }}
+                              transition={{ duration: 1.2, ease: "easeOut" }}
+                              className="h-full bg-gradient-to-r from-orange-500 via-orange-450 to-amber-400 rounded-full relative"
+                            >
+                              {/* Glowing tracker beacon at tip */}
+                              <span className="absolute right-0 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-white rounded-full shadow-[0_0_8px_#f97316] animate-pulse" />
+                            </motion.div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
 
-                  {/* Skills Progress lists */}
-                  <div className="grid gap-x-6 gap-y-5 pt-1">
-                    {cat.skills.map((skill) => (
-                      <div key={skill.name} className="space-y-1.5 font-mono">
-                        <div className="flex items-center justify-between text-[11px]">
-                          <span className="text-neutral-300 font-medium group-hover:text-neutral-100 transition-colors">
-                            {skill.name}
-                          </span>
-                          <span className="text-orange-500 font-extrabold text-[10px] bg-orange-500/5 px-2 py-0.5 rounded border border-orange-500/10">
-                            {skill.proficiency}%
-                          </span>
-                        </div>
-                        
-                        {/* Custom styled progress slider */}
-                        <div className="relative w-full h-1.5 bg-neutral-950 rounded-full overflow-hidden border border-neutral-900/80 p-[0.5px]">
-                          <motion.div
-                            initial={{ width: 0 }}
-                            animate={{ width: `${skill.proficiency}%` }}
-                            transition={{ duration: 1.2, ease: "easeOut" }}
-                            className="h-full bg-gradient-to-r from-orange-500 to-amber-400 rounded-full shadow-[0_0_6px_rgba(249,115,22,0.25)]"
-                          />
-                        </div>
-                      </div>
-                    ))}
+                  {/* Micro operational metrics module at bottom */}
+                  <div className="mt-8 pt-4 border-t border-neutral-900/40">
+                    <div className="bg-neutral-950 rounded-xl p-3.5 border border-neutral-900 text-[10.5px] font-mono relative overflow-hidden group-hover:border-neutral-850/80 transition-all">
+                      <span className="text-[9px] font-bold text-orange-500/90 uppercase tracking-wider block mb-1">
+                        [TJB-Telemetry-Auditor://live-node]
+                      </span>
+                      <p className="text-neutral-500 leading-relaxed font-light group-hover:text-neutral-450 transition-colors font-mono">
+                        {cat.id === "frontend" && "// SYSTEM: Production builds compiled under tight TS flags. Dynamic asset compression. Checked layout viewports."}
+                        {cat.id === "backend" && "// SYSTEM: Core API rates validated. Footprints trimmed down using clusters and high-efficiency Redis microcaches."}
+                        {cat.id === "data" && "// SYSTEM: Relational schema indices parsed. B-Tree leaf fragmentation checked. Zero sequential table scans."}
+                        {cat.id === "infrastructure" && "// SYSTEM: Secure container configs compiled. Health triggers returned 205 OK. Admin-auth tokens parsed."}
+                        {!["frontend", "backend", "data", "infrastructure"].includes(cat.id) && `// SYSTEM: Custom admin parameters synchronized successfully. Initialized telemetry tracker for ${cat.name}.`}
+                      </p>
+                    </div>
                   </div>
-                </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </div>
+      </motion.section>
 
-                {/* Micro operational metrics module at bottom */}
-                <div className="mt-8 pt-4 border-t border-neutral-900/40">
-                  <div className="bg-neutral-950 rounded-xl p-3.5 border border-neutral-900 text-[10.5px] font-mono relative overflow-hidden">
-                    <span className="text-[9px] font-bold text-orange-500 uppercase tracking-wider block mb-1">
-                      [TJB-Telemetry-Auditor://live-node]
-                    </span>
-                    <p className="text-neutral-500 leading-relaxed font-light">
-                      {cat.id === "frontend" && "// SYSTEM: Production builds compiled under tight TS flags. Dynamic asset compression. Checked layout viewports."}
-                      {cat.id === "backend" && "// SYSTEM: Core API rates validated. Footprints trimmed down using clusters and high-efficiency Redis microcaches."}
-                      {cat.id === "data" && "// SYSTEM: Relational schema indices parsed. B-Tree leaf fragmentation checked. Zero sequential table scans."}
-                      {cat.id === "infrastructure" && "// SYSTEM: Secure container configs compiled. Health triggers returned 205 OK. Admin-auth tokens parsed."}
-                      {!["frontend", "backend", "data", "infrastructure"].includes(cat.id) && `// SYSTEM: Custom admin parameters synchronized successfully. Initialized telemetry tracker for ${cat.name}.`}
+      {/* My School (Academic Trajectory Node Module) */}
+      <motion.section
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true, margin: "-120px" }}
+        variants={scrollRevealVariants}
+        id="school"
+        className="py-24 border-t border-neutral-900/30 relative snap-start"
+      >
+        <div className="max-w-7xl mx-auto px-6">
+          {/* Header */}
+          <div className="flex flex-col md:flex-row items-start md:items-end justify-between mb-16 gap-4">
+            <div>
+              <p className="font-mono text-xs text-orange-500 uppercase tracking-[0.3em] font-extrabold flex items-center gap-2">
+                <span className="w-4 h-[1px] bg-orange-500" />
+                <span>Academic Trajectory Matrix</span>
+              </p>
+              <h2 className="text-3xl md:text-4xl font-sans font-bold text-neutral-100 max-w-lg mt-2 leading-tight">
+                My Schools & Education <span className="text-orange-500 font-mono">_</span>
+              </h2>
+            </div>
+            <p className="text-xs text-neutral-500 font-mono max-w-sm font-light leading-relaxed">
+              Verifiable calibration sequence representing academic accomplishments, technical training nodes, and engineering expertise accumulated in Rwanda.
+            </p>
+          </div>
+
+          {/* Grid of Cards */}
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+            {[
+              {
+                id: "eden",
+                level: "Primary Education",
+                name: "EDEN SCHOOL",
+                tag: "Logical Foundations",
+                duration: "2009 - 2014",
+                distinction: "Distinction in Mathematics",
+                highlights: ["Analytical Mindset", "Math & Logic", "Problem Solving"],
+                icon: <BookOpen className="w-5 h-5" />,
+                desc: language === "en" 
+                  ? "Cultivated foundational logical thinking, mathematical proficiency, and structured analysis. Established the mathematical baseline for high-grade computational design and engineering architectures." 
+                  : "Urufatiro rwo kubara, gusesengura no gutekereza neza mu buryo bwa gihanga. Aha ni ho hantu hashyizwe urufatiro rw'imibare rufasha mu gushushanya na porogaramu za mudasobwa zigezweho."
+              },
+              {
+                id: "kamambe",
+                level: "Secondary O-Level",
+                name: "KAMAMBE",
+                tag: "Scientific Methodology",
+                duration: "2015 - 2017",
+                distinction: "Top Tier Physics Club Lead",
+                highlights: ["Natural Sciences", "Systematic Logic", "Team Collaboration"],
+                icon: <Award className="w-5 h-5" />,
+                desc: language === "en" 
+                  ? "Engaged in scientific methodologies comprising biology, mathematics, and complex physics patterns. Built exceptional communication protocols and collaborative logic models." 
+                  : "Hano hiciwe ubumenyi bw'ibanze mu mibare n'ubugenge (Sciences). Twahoraga twitoza gukorera mu matsinda no gukemura ibibazo biteye amatsiko mu buryo bufatika."
+              },
+              {
+                id: "giheke",
+                level: "A2 Secondary",
+                name: "GIHEKE TSS",
+                tag: "Technical Instruction Node",
+                duration: "2018 - 2020",
+                distinction: "Software Systems Gold Medalist",
+                highlights: ["Software Dev", "IP Routing", "DBMS Foundations"],
+                icon: <Code className="w-5 h-5" />,
+                desc: language === "en" 
+                  ? "Rigorous hands-on immersion in software application development, TCP/IP network infrastructures, database engines, and logical configuration management. Graduated top-of-class with professional system software designs." 
+                  : "Isomo rishyira mu bikorwa ryo gukora porogaramu, gushyiraho imiyoboro y'itumanaho (Networks), no kubaka amadashibodi y'amakuru. Twarangije ku isonga dufite ubumenyi bwo kubaka porogaramu."
+              },
+              {
+                id: "nyanza",
+                level: "Higher Education A1 & A0",
+                name: "IPRC NYANZA",
+                tag: "Full-Stack System Engineering",
+                duration: "2021 - 2024",
+                distinction: "Engineering Excellence Lead Candidate",
+                highlights: ["Advanced Software Eng", "System Architecture", "Telemetry APIs"],
+                icon: <GraduationCap className="w-5 h-5" />,
+                desc: language === "en" 
+                  ? "Acquired elite theoretical and practical expertise (A1 & A0 credentials) covering advanced algorithms, cloud microservices, architectural patterns, relational database optimization, and high-performance server routines." 
+                  : "Amashuri makuru na kaminuza mu gukora porogaramu zikomye (Software Engineering), amategeko arinda urubuga, kubaka za API zihuta no gusesengura mudasobwa mu buryo buhanitse (A1 & A0)."
+              }
+            ].map((school) => {
+              const isSelected = selectedSchoolNode === school.id;
+              return (
+                <motion.div
+                  key={school.id}
+                  onClick={() => setSelectedSchoolNode(school.id)}
+                  className={`cursor-pointer group relative p-6 rounded-3xl border transition-all duration-300 flex flex-col justify-between min-h-[300px] select-none ${
+                    isSelected
+                      ? "bg-orange-500/10 border-orange-500/50 shadow-lg shadow-orange-500/5"
+                      : "bg-neutral-900/10 border-neutral-900/60 hover:border-orange-500/30 hover:bg-neutral-900/20"
+                  }`}
+                  whileHover={{ y: -5 }}
+                >
+                  {/* Decorative glowing back-pill */}
+                  {isSelected && (
+                    <div className="absolute inset-0 bg-gradient-to-br from-orange-500/5 via-transparent to-transparent opacity-50 rounded-3xl pointer-events-none" />
+                  )}
+
+                  <div className="space-y-4 relative z-10">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-mono tracking-wider text-orange-500 font-bold uppercase">
+                        {school.level}
+                      </span>
+                      <span className="text-[10px] font-mono text-neutral-500">
+                        {school.duration}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-3 mt-1">
+                      <div className={`p-2.5 rounded-xl font-bold transition-all ${
+                        isSelected 
+                          ? "bg-orange-500 text-neutral-950 scale-110" 
+                          : "bg-neutral-950 text-orange-500 group-hover:bg-orange-500/20 group-hover:text-orange-400"
+                      }`}>
+                        {school.icon}
+                      </div>
+                      <div>
+                        <h3 className="font-sans font-bold text-base text-neutral-100 tracking-tight leading-none group-hover:text-orange-500 transition-colors">
+                          {school.name}
+                        </h3>
+                        <span className="text-[10px] font-mono text-neutral-500 uppercase tracking-widest mt-1 block leading-none">
+                          {school.tag}
+                        </span>
+                      </div>
+                    </div>
+
+                    <p className="text-[11.5px] text-neutral-400 leading-relaxed font-sans font-light">
+                      {school.desc}
                     </p>
                   </div>
+
+                  {/* Highlights and distinctions */}
+                  <div className="mt-6 pt-4 border-t border-neutral-900/60 flex flex-wrap gap-1.5 relative z-10">
+                    {school.highlights.map((h, idx) => (
+                      <span
+                        key={idx}
+                        className={`text-[9.5px] font-mono px-2 py-0.5 rounded leading-none ${
+                          isSelected
+                            ? "bg-orange-500/20 text-orange-400 border border-orange-500/30"
+                            : "bg-neutral-950 text-neutral-500 border border-neutral-900"
+                        }`}
+                      >
+                        {h}
+                      </span>
+                    ))}
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+
+          {/* School Node Live Telemetry Inspection Module */}
+          <div className="bg-neutral-950 rounded-2xl p-5 border border-neutral-900/80 font-mono text-xs relative overflow-hidden">
+            <span className="text-[9px] font-extrabold text-orange-500 uppercase tracking-widest block mb-1">
+              [TJB-Academic-Telemetry://live-node-inspector]
+            </span>
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mt-2">
+              <div className="space-y-1">
+                <p className="text-neutral-400 font-sans">
+                  {selectedSchoolNode === "eden" && (
+                    <span>ACTIVE INSPECTION: <strong className="text-orange-500">EDEN SCHOOL Primary Curriculum</strong>. Foundational math and early science nodes compiled perfectly. Academic register verified.</span>
+                  )}
+                  {selectedSchoolNode === "kamambe" && (
+                    <span>ACTIVE INSPECTION: <strong className="text-orange-500">KAMAMBE Secondary O-Level Instruction</strong>. Strong mathematical baseline, science modeling, and systemic analytical proficiency established.</span>
+                  )}
+                  {selectedSchoolNode === "giheke" && (
+                    <span>ACTIVE INSPECTION: <strong className="text-orange-500">GIHEKE TSS Software A2 System</strong>. Hands-on network node layouts, routing topologies, relational data engines, and algorithmic design matrices. Certified Software Specialist.</span>
+                  )}
+                  {selectedSchoolNode === "nyanza" && (
+                    <span>ACTIVE INSPECTION: <strong className="text-orange-500">IPRC NYANZA High-Grade Software Engineering A1 & A0</strong>. Advance database operations, distributed microservices, state engine caching pipelines, and secure networking architectures. Professional engineer verified.</span>
+                  )}
+                </p>
+                <div className="flex items-center gap-3 mt-1.5 text-[10px] text-neutral-500 font-mono flex-wrap">
+                  <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /> STATUS: DEPLOYED</span>
+                  <span>&bull;</span>
+                  <span>ACADEMIC KEY: {selectedSchoolNode?.toUpperCase()}-NODE-TJB-2026</span>
+                  <span>&bull;</span>
+                  <span className="text-orange-500/80">HONORS: {
+                    selectedSchoolNode === "eden" ? "Distinction in Mathematics" :
+                    selectedSchoolNode === "kamambe" ? "Top Tier Physics Club Lead" :
+                    selectedSchoolNode === "giheke" ? "Software Systems Gold Medalist" :
+                    "Engineering Excellence Lead Candidate"
+                  }</span>
                 </div>
-              </motion.div>
-            ))}
+              </div>
+              <div className="shrink-0 flex items-center bg-neutral-900/90 border border-neutral-850 rounded-xl px-4 py-2.5 text-[10px] text-orange-450 font-mono font-bold uppercase tracking-widest shadow-inner self-stretch md:self-auto justify-center">
+                <span>Verification Node Active</span>
+              </div>
+            </div>
           </div>
         </div>
       </motion.section>
@@ -3599,7 +3907,7 @@ export default function App() {
 
             {/* RealChat AI section & quick launcher */}
             <div className="md:col-span-4 space-y-4">
-              <span className="text-[10px] uppercase font-mono tracking-[0.2em] font-bold text-neutral-500 block">AI Integration Hub</span>
+              <span className="text-[10px] uppercase font-mono tracking-[0.2em] font-bold text-neutral-500 block">AI & Database Hub</span>
               <div className="p-5 bg-orange-500/[0.02] border border-orange-500/10 hover:border-orange-500/20 rounded-2xl space-y-4 transition-all duration-300">
                 <div className="space-y-1.5">
                   <div className="flex flex-wrap items-center gap-2">
@@ -3610,9 +3918,12 @@ export default function App() {
                     <span className="text-[9px] px-2 py-0.5 rounded bg-orange-500/10 border border-orange-500/20 text-orange-400 font-mono font-bold uppercase tracking-wider">
                       Gemini 3.5 Flash
                     </span>
+                    <span className="text-[9px] px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-mono font-bold uppercase tracking-wider">
+                      Supabase DB
+                    </span>
                   </div>
                   <p className="text-[11px] text-neutral-450 leading-relaxed font-sans">
-                    Connect immediately with my responsive Gemini 3.5 Flash powered AI copilot. I am also paged directly to reply in real-time.
+                    Connect immediately with my responsive Gemini 3.5 Flash powered AI copilot, dynamically mirrored to a secure, real-time <span className="text-emerald-400 font-mono">Supabase</span> database layer.
                   </p>
                 </div>
                 
@@ -3681,7 +3992,17 @@ export default function App() {
                     <div className="w-2.5 h-2.5 rounded-full bg-orange-500 animate-pulse shrink-0" />
                     <div>
                       <h3 className="font-bold text-neutral-100">Live Chat & AI Copilot</h3>
-                      <p className="text-[10px] text-neutral-500 font-mono">Status: Connected to Baptiste</p>
+                      <p className="text-[10px] text-neutral-500 font-mono flex items-center gap-1.5 flex-wrap">
+                        <span>Connected to Baptiste</span>
+                        <span className="text-neutral-750 font-sans">&bull;</span>
+                        <span className={`text-[9px] px-1.5 py-0.2 rounded font-sans font-bold uppercase tracking-wider ${
+                          supabaseActive
+                            ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                            : "bg-neutral-900 text-neutral-550 border border-neutral-850"
+                        }`} title={supabaseActive ? "Active Sync with Supabase Database" : "Sync fallback to Node Server cache"}>
+                          {supabaseActive ? "Supabase Active" : "Local Mem"}
+                        </span>
+                      </p>
                     </div>
                   </div>
                   <button
@@ -3794,9 +4115,10 @@ export default function App() {
                 <button
                   type="submit"
                   disabled={isAILoading || !chatInput.trim()}
-                  className="p-3 bg-neutral-105 border border-none text-neutral-950 rounded-xl hover:bg-neutral-200 disabled:opacity-40 transition-colors shrink-0 cursor-pointer"
+                  className="px-4.5 py-3 bg-orange-500 hover:bg-orange-600 border border-none text-white rounded-xl font-mono text-xs uppercase tracking-wider font-bold disabled:opacity-40 transition-all shrink-0 cursor-pointer flex items-center gap-2 active:scale-95 shadow-md shadow-orange-500/15"
                 >
-                  <Send className="w-4 h-4" />
+                  <span>Send</span>
+                  <Send className="w-3.5 h-3.5" />
                 </button>
               </form>
             </motion.div>

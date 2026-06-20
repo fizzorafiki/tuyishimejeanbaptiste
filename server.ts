@@ -3,6 +3,7 @@ import path from "path";
 import dotenv from "dotenv";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
+import { createClient } from "@supabase/supabase-js";
 
 dotenv.config();
 
@@ -95,6 +96,161 @@ const chatSessions: Record<string, ChatSession> = {
   }
 };
 
+// Create Supabase Client Lazily and Safely
+let supabaseClient: any = null;
+const supUrl = process.env.SUPABASE_URL;
+const supKey = process.env.SUPABASE_ANON_KEY;
+
+if (supUrl && supKey && supUrl !== "MY_SUPABASE_URL") {
+  try {
+    supabaseClient = createClient(supUrl, supKey);
+    console.log("Successfully initialized Supabase Client.");
+  } catch (error) {
+    console.error("Failed to initialize Supabase client:", error);
+  }
+} else {
+  console.log("SUPABASE_URL or SUPABASE_ANON_KEY not configured. Falling back to in-memory store.");
+}
+
+// Resilient Supabase Synchronization Helpers
+async function syncSessionFromSupabase(sessionId: string) {
+  if (!supabaseClient) return;
+  try {
+    const { data: chatData, error: chatError } = await supabaseClient
+      .from("tjb_chats")
+      .select("*")
+      .eq("session_id", sessionId)
+      .maybeSingle();
+
+    if (chatError) {
+      console.warn("Supabase fetch chat warn:", chatError.message);
+      return;
+    }
+    if (!chatData) return;
+
+    const { data: messagesData, error: messagesError } = await supabaseClient
+      .from("tjb_messages")
+      .select("*")
+      .eq("session_id", sessionId)
+      .order("timestamp", { ascending: true });
+
+    if (messagesError) {
+      console.warn("Supabase fetch messages warn:", messagesError.message);
+      return;
+    }
+
+    chatSessions[sessionId] = {
+      sessionId: chatData.session_id,
+      visitorName: chatData.visitor_name,
+      createdAt: new Date(chatData.created_at).getTime(),
+      lastActive: new Date(chatData.last_active).getTime(),
+      aiEnabled: !!chatData.ai_enabled,
+      messages: (messagesData || []).map((m: any) => ({
+        id: m.id,
+        sender: m.sender,
+        content: m.content,
+        timestamp: new Date(m.timestamp).getTime()
+      }))
+    };
+  } catch (err: any) {
+    console.error("Resilient syncSessionFromSupabase caught exception:", err.message);
+  }
+}
+
+async function saveSessionToSupabase(sessionId: string) {
+  if (!supabaseClient) return;
+  const session = chatSessions[sessionId];
+  if (!session) return;
+  try {
+    const { error } = await supabaseClient
+      .from("tjb_chats")
+      .upsert({
+        session_id: session.sessionId,
+        visitor_name: session.visitorName,
+        created_at: new Date(session.createdAt).toISOString(),
+        last_active: new Date(session.lastActive).toISOString(),
+        ai_enabled: session.aiEnabled
+      });
+    if (error) {
+      console.warn("Supabase upsert chat warn:", error.message);
+    }
+  } catch (err: any) {
+    console.error("Resilient saveSessionToSupabase caught exception:", err.message);
+  }
+}
+
+async function saveMessageToSupabase(sessionId: string, message: ChatMessage) {
+  if (!supabaseClient) return;
+  try {
+    const { error } = await supabaseClient
+      .from("tjb_messages")
+      .upsert({
+        id: message.id,
+        session_id: sessionId,
+        sender: message.sender,
+        content: message.content,
+        timestamp: new Date(message.timestamp).toISOString()
+      });
+    if (error) {
+      console.warn("Supabase upsert message warn:", error.message);
+    }
+  } catch (err: any) {
+    console.error("Resilient saveMessageToSupabase caught exception:", err.message);
+  }
+}
+
+async function deleteSessionFromSupabase(sessionId: string) {
+  if (!supabaseClient) return;
+  try {
+    await supabaseClient.from("tjb_messages").delete().eq("session_id", sessionId);
+    await supabaseClient.from("tjb_chats").delete().eq("session_id", sessionId);
+  } catch (err: any) {
+    console.error("Resilient deleteSessionFromSupabase caught exception:", err.message);
+  }
+}
+
+async function refreshAllSessionsFromSupabase() {
+  if (!supabaseClient) return;
+  try {
+    const { data: chats, error: chatsError } = await supabaseClient
+      .from("tjb_chats")
+      .select("*")
+      .order("last_active", { ascending: false });
+
+    if (chatsError) {
+      console.warn("Supabase query chats list warn (Tables might not be defined):", chatsError.message);
+      return;
+    }
+    if (!chats) return;
+
+    for (const chat of chats) {
+      const { data: msgs, error: msgsError } = await supabaseClient
+        .from("tjb_messages")
+        .select("*")
+        .eq("session_id", chat.session_id)
+        .order("timestamp", { ascending: true });
+
+      if (!msgsError && msgs) {
+        chatSessions[chat.session_id] = {
+          sessionId: chat.session_id,
+          visitorName: chat.visitor_name,
+          createdAt: new Date(chat.created_at).getTime(),
+          lastActive: new Date(chat.last_active).getTime(),
+          aiEnabled: !!chat.ai_enabled,
+          messages: msgs.map((m: any) => ({
+            id: m.id,
+            sender: m.sender,
+            content: m.content,
+            timestamp: new Date(m.timestamp).getTime()
+          }))
+        };
+      }
+    }
+  } catch (err: any) {
+    console.error("Resilient refreshAllSessionsFromSupabase caught exception:", err.message);
+  }
+}
+
 // Local assistant generator function to reuse for both proxy and chat sessions
 async function askAI(conversation: { role: "user" | "model"; parts: { text: string }[] }[]): Promise<string> {
   if (aiClient) {
@@ -136,18 +292,30 @@ async function askAI(conversation: { role: "user" | "model"; parts: { text: stri
 
 // API routes
 app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", mode: process.env.NODE_ENV || "development" });
+  res.json({ 
+    status: "ok", 
+    mode: process.env.NODE_ENV || "development",
+    supabaseConfigured: !!supabaseClient 
+  });
 });
 
 // GET: Fetch all active chat sessions (useful for Admin Dashboard)
-app.get("/api/chat/sessions", (req, res) => {
+app.get("/api/chat/sessions", async (req, res) => {
+  if (supabaseClient) {
+    await refreshAllSessionsFromSupabase();
+  }
   const sessionsList = Object.values(chatSessions).sort((a, b) => b.lastActive - a.lastActive);
   res.json({ sessions: sessionsList });
 });
 
 // GET: Fetch or initialize a single chat session
-app.get("/api/chat/session/:sessionId", (req, res) => {
+app.get("/api/chat/session/:sessionId", async (req, res) => {
   const { sessionId } = req.params;
+  
+  if (supabaseClient) {
+    await syncSessionFromSupabase(sessionId);
+  }
+
   if (!chatSessions[sessionId]) {
     chatSessions[sessionId] = {
       sessionId,
@@ -164,6 +332,10 @@ app.get("/api/chat/session/:sessionId", (req, res) => {
         }
       ]
     };
+    if (supabaseClient) {
+      await saveSessionToSupabase(sessionId);
+      await saveMessageToSupabase(sessionId, chatSessions[sessionId].messages[0]);
+    }
   }
   res.json(chatSessions[sessionId]);
 });
@@ -175,6 +347,10 @@ app.post("/api/chat/send", async (req, res) => {
   if (!sessionId || !sender || !content) {
     res.status(400).json({ error: "Missing required params: sessionId, sender, content." });
     return;
+  }
+
+  if (supabaseClient) {
+    await syncSessionFromSupabase(sessionId);
   }
 
   // Ensure session exists
@@ -204,6 +380,11 @@ app.post("/api/chat/send", async (req, res) => {
   };
   session.messages.push(newMessage);
 
+  if (supabaseClient) {
+    await saveSessionToSupabase(sessionId);
+    await saveMessageToSupabase(sessionId, newMessage);
+  }
+
   // If a visitor sent the message and AI auto-response is turned on, generate AI response
   if (sender === "visitor" && session.aiEnabled) {
     const aiConversation = session.messages.map(m => ({
@@ -219,21 +400,32 @@ app.post("/api/chat/send", async (req, res) => {
       timestamp: Date.now()
     };
     session.messages.push(aiMessage);
+
+    if (supabaseClient) {
+      await saveMessageToSupabase(sessionId, aiMessage);
+    }
   }
 
   res.json(session);
 });
 
 // POST: Toggle AI mode for a session
-app.post("/api/chat/toggle-ai", (req, res) => {
+app.post("/api/chat/toggle-ai", async (req, res) => {
   const { sessionId, aiEnabled } = req.body;
   if (!sessionId || aiEnabled === undefined) {
     res.status(400).json({ error: "Missing sessionId or aiEnabled boolean representation." });
     return;
   }
 
+  if (supabaseClient) {
+    await syncSessionFromSupabase(sessionId);
+  }
+
   if (chatSessions[sessionId]) {
     chatSessions[sessionId].aiEnabled = !!aiEnabled;
+    if (supabaseClient) {
+      await saveSessionToSupabase(sessionId);
+    }
     res.json(chatSessions[sessionId]);
   } else {
     res.status(404).json({ error: "Session not found." });
@@ -243,7 +435,16 @@ app.post("/api/chat/toggle-ai", (req, res) => {
 // POST: Generate AI suggested response for the Administrator
 app.post("/api/chat/suggest-ai", async (req, res) => {
   const { sessionId } = req.body;
-  if (!sessionId || !chatSessions[sessionId]) {
+  if (!sessionId) {
+    res.status(400).json({ error: "Missing sessionId." });
+    return;
+  }
+
+  if (supabaseClient) {
+    await syncSessionFromSupabase(sessionId);
+  }
+
+  if (!chatSessions[sessionId]) {
     res.status(404).json({ error: "Chat session invalid or not found." });
     return;
   }
@@ -293,12 +494,17 @@ app.post("/api/chat/suggest-ai", async (req, res) => {
 });
 
 // POST: Permanently delete/archive a chat session (Admin command)
-app.post("/api/chat/delete-session", (req, res) => {
+app.post("/api/chat/delete-session", async (req, res) => {
   const { sessionId } = req.body;
   if (!sessionId) {
     res.status(400).json({ error: "Missing sessionId parameter." });
     return;
   }
+
+  if (supabaseClient) {
+    await deleteSessionFromSupabase(sessionId);
+  }
+
   if (chatSessions[sessionId]) {
     delete chatSessions[sessionId];
     res.json({ success: true, message: "Chat session trace wiped." });
